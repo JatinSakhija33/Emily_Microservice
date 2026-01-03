@@ -241,7 +241,7 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess, isDarkMode = false }) =>
                       ))}
                     </div>
                   </div>
-                </div>y
+                </div>
               )}
             </div>
               
