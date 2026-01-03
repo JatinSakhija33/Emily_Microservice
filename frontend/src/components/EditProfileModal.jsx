@@ -201,19 +201,11 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess, isDarkMode = false }) =>
                           onClick={() => handleStepChange(index)}
                           className={`w-full text-left px-2 sm:px-3 py-1.5 sm:py-2 md:py-2.5 rounded-md text-xs sm:text-sm transition-all duration-200 ${
                             index === currentStep
-                              ? steps[index] === 'Business Description'
-                                ? isDarkMode
-                                  ? 'bg-red-900/50 text-red-300 font-medium shadow-sm border border-red-700'
-                                  : 'bg-red-100 text-red-700 font-medium shadow-sm'
-                                : isDarkMode
+                              ? isDarkMode
                                 ? 'bg-pink-900/50 text-pink-300 font-medium shadow-sm border border-pink-700'
                                 : 'bg-pink-100 text-pink-700 font-medium shadow-sm'
                               : completedSteps.has(index)
-                              ? steps[index] === 'Business Description'
-                                ? isDarkMode
-                                  ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50 border border-red-700'
-                                  : 'bg-red-50 text-red-700 hover:bg-red-100'
-                                : isDarkMode
+                              ? isDarkMode
                                 ? 'bg-green-900/30 text-green-400 hover:bg-green-900/50 border border-green-700'
                                 : 'bg-green-50 text-green-700 hover:bg-green-100'
                               : isDarkMode
@@ -224,13 +216,9 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess, isDarkMode = false }) =>
                           <div className="flex items-center space-x-2">
                             <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-medium transition-colors flex-shrink-0 ${
                               index === currentStep
-                                ? steps[index] === 'Business Description'
-                                  ? 'bg-red-600 text-white'
-                                  : 'bg-pink-600 text-white'
+                                ? 'bg-pink-600 text-white'
                                 : completedSteps.has(index)
-                                ? steps[index] === 'Business Description'
-                                  ? 'bg-red-500 text-white'
-                                  : 'bg-green-500 text-white'
+                                ? 'bg-green-500 text-white'
                                 : isDarkMode
                                 ? 'bg-gray-700 text-gray-400'
                                 : 'bg-gray-200 text-gray-600'
@@ -243,14 +231,10 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess, isDarkMode = false }) =>
                             </div>
                             <span className="flex-1 truncate">{step}</span>
                             {index === currentStep && (
-                              <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full flex-shrink-0 ${
-                                steps[index] === 'Business Description' ? 'bg-red-600' : 'bg-pink-600'
-                              }`}></div>
+                              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-pink-600 rounded-full flex-shrink-0"></div>
                             )}
                             {completedSteps.has(index) && (
-                              <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full flex-shrink-0 ${
-                                steps[index] === 'Business Description' ? 'bg-red-500' : 'bg-green-500'
-                              }`}></div>
+                              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full flex-shrink-0"></div>
                             )}
                           </div>
                         </button>
