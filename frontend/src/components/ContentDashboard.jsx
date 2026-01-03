@@ -74,14 +74,61 @@ import {
   Layers
 } from 'lucide-react'
 
+// Dark mode hook
+const useDarkMode = () => {
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Check localStorage for saved preference, default to light mode
+    return localStorage.getItem('darkMode') === 'true'
+  })
+
+  useEffect(() => {
+    localStorage.setItem('darkMode', isDarkMode.toString())
+    // Apply to document for global dark mode
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
+
+  // Listen for dark mode changes from navbar
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.detail && event.detail.key === 'darkMode') {
+        const newValue = event.detail.value === 'true'
+        setIsDarkMode(newValue)
+      }
+    }
+
+    // Also listen for direct localStorage changes (for cross-tab sync)
+    const handleLocalStorageChange = (e) => {
+      if (e.key === 'darkMode') {
+        const newValue = e.newValue === 'true'
+        setIsDarkMode(newValue)
+      }
+    }
+
+    window.addEventListener('localStorageChange', handleStorageChange)
+    window.addEventListener('storage', handleLocalStorageChange)
+
+    return () => {
+      window.removeEventListener('localStorageChange', handleStorageChange)
+      window.removeEventListener('storage', handleLocalStorageChange)
+    }
+  }, [])
+
+  return [isDarkMode, setIsDarkMode]
+}
+
 const ContentDashboard = () => {
   const { user } = useAuth()
   const { showContentGeneration, showSuccess, showError, showLoading } = useNotifications()
-  const { 
-    scheduledContent, 
-    contentDate, 
-    loading, 
-    fetchScheduledContent, 
+  const [isDarkMode, setIsDarkMode] = useDarkMode()
+  const {
+    scheduledContent,
+    contentDate,
+    loading,
+    fetchScheduledContent,
     updateContentInCache,
     getCacheStatus,
     clearCache,
@@ -1127,8 +1174,95 @@ const ContentDashboard = () => {
   const getPlatformCardTheme = (platform) => {
     // Normalize platform name to lowercase for consistent matching
     const normalizedPlatform = platform?.toLowerCase()?.trim()
-    
-    const themes = {
+
+    const themes = isDarkMode ? {
+      // Dark mode themes
+      facebook: {
+        bg: 'bg-gray-800/80',
+        border: 'border-blue-700/50',
+        iconBg: 'bg-blue-600',
+        text: 'text-blue-400',
+        accent: 'bg-blue-900/50'
+      },
+      instagram: {
+        bg: 'bg-gray-800/80',
+        border: 'border-pink-700/50',
+        iconBg: 'bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500',
+        text: 'text-pink-400',
+        accent: 'bg-pink-900/50'
+      },
+      linkedin: {
+        bg: 'bg-gray-800/80',
+        border: 'border-blue-700/50',
+        iconBg: 'bg-blue-700',
+        text: 'text-blue-400',
+        accent: 'bg-blue-900/50'
+      },
+      twitter: {
+        bg: 'bg-gray-800/80',
+        border: 'border-sky-700/50',
+        iconBg: 'bg-sky-500',
+        text: 'text-sky-400',
+        accent: 'bg-sky-900/50'
+      },
+      'twitter/x': {
+        bg: 'bg-gray-800/80',
+        border: 'border-sky-700/50',
+        iconBg: 'bg-sky-500',
+        text: 'text-sky-400',
+        accent: 'bg-sky-900/50'
+      },
+      'x': {
+        bg: 'bg-gray-800/80',
+        border: 'border-sky-700/50',
+        iconBg: 'bg-sky-500',
+        text: 'text-sky-400',
+        accent: 'bg-sky-900/50'
+      },
+      tiktok: {
+        bg: 'bg-gray-800/80',
+        border: 'border-gray-700/50',
+        iconBg: 'bg-black',
+        text: 'text-gray-400',
+        accent: 'bg-gray-900/50'
+      },
+      youtube: {
+        bg: 'bg-gray-800/80',
+        border: 'border-red-700/50',
+        iconBg: 'bg-red-600',
+        text: 'text-red-400',
+        accent: 'bg-red-900/50'
+      },
+      'google business profile': {
+        bg: 'bg-gray-800/80',
+        border: 'border-green-700/50',
+        iconBg: 'bg-green-600',
+        text: 'text-green-400',
+        accent: 'bg-green-900/50'
+      },
+      'google business': {
+        bg: 'bg-gray-800/80',
+        border: 'border-green-700/50',
+        iconBg: 'bg-green-600',
+        text: 'text-green-400',
+        accent: 'bg-green-900/50'
+      },
+      'google-business': {
+        bg: 'bg-gray-800/80',
+        border: 'border-green-700/50',
+        iconBg: 'bg-green-600',
+        text: 'text-green-400',
+        accent: 'bg-green-900/50'
+      },
+      'google-my-business': {
+        bg: 'bg-gray-800/80',
+        border: 'border-green-700/50',
+        iconBg: 'bg-green-600',
+        text: 'text-green-400',
+        accent: 'bg-green-900/50'
+      }
+    } : {
+      // Light mode themes
       facebook: {
         bg: 'bg-white/50',
         border: 'border-blue-300',
@@ -1214,23 +1348,29 @@ const ContentDashboard = () => {
         accent: 'bg-green-200'
       }
     }
-    
+
     let theme = themes[normalizedPlatform]
-    
+
     // Try alternative variations for Google Business
     if (!theme && (normalizedPlatform.includes('google') && normalizedPlatform.includes('business'))) {
       console.log('Trying alternative Google Business theme variations...')
       theme = themes['google business profile'] || themes['google business'] || themes['google-business'] || themes['google-my-business']
       console.log('Alternative Google Business theme found:', theme)
     }
-    
+
     if (theme) {
       return theme
     }
-    
+
     // Fallback theme
     console.warn('Unknown platform for theme:', platform, 'normalized:', normalizedPlatform)
-    return {
+    return isDarkMode ? {
+      bg: 'bg-gray-800/80',
+      border: 'border-gray-700/50',
+      iconBg: 'bg-gray-500',
+      text: 'text-gray-400',
+      accent: 'bg-gray-900/50'
+    } : {
       bg: 'bg-white/50',
       border: 'border-gray-300',
       iconBg: 'bg-gray-500',
@@ -3034,7 +3174,7 @@ const ContentDashboard = () => {
   }, [lightboxImage])
 
   return (
-    <div className="h-screen bg-white overflow-hidden">
+    <div className={`h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-white'} overflow-hidden`}>
       {/* Content Generation Modal */}
       <ContentGenerationModal 
         isVisible={showGenerationModal} 
@@ -3052,18 +3192,28 @@ const ContentDashboard = () => {
       {showConfirmationModal && (
         <div className="fixed z-50 flex items-center justify-center md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
           <div className="fixed bg-black bg-opacity-50 backdrop-blur-sm md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }} />
-          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 z-10">
+          <div className={`relative rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 z-10 ${
+            isDarkMode ? 'bg-gray-800' : 'bg-white'
+          }`}>
             <div className="text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-orange-100 mb-4">
-                <svg className="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4 ${
+                isDarkMode ? 'bg-orange-900/50' : 'bg-orange-100'
+              }`}>
+                <svg className={`h-6 w-6 fill="none" viewBox="0 0 24 24" stroke="currentColor" ${
+                  isDarkMode ? 'text-orange-400' : 'text-orange-600'
+                }`}>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <h3 className={`text-lg font-semibold mb-2 ${
+                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+              }`}>
                 Generate Fresh Content
               </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                This will delete your old content and create fresh content for all platforms. 
+              <p className={`text-sm mb-4 ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}>
+                This will delete your old content and create fresh content for all platforms.
                 Are you sure you want to proceed?
               </p>
               <div className="mb-6">
@@ -3072,16 +3222,24 @@ const ContentDashboard = () => {
                     type="checkbox"
                     checked={generateImagesWithContent}
                     onChange={(e) => setGenerateImagesWithContent(e.target.checked)}
-                    className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500 focus:ring-2"
+                    className={`w-4 h-4 text-pink-600 rounded focus:ring-pink-500 focus:ring-2 ${
+                      isDarkMode ? 'border-gray-600' : 'border-gray-300'
+                    }`}
                   />
                   <div className="flex items-center space-x-2">
-                    <Image className="w-4 h-4 text-gray-600" />
-                    <span className="text-sm text-gray-700 group-hover:text-gray-900">
+                    <Image className={`w-4 h-4 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`} />
+                    <span className={`text-sm group-hover:text-gray-900 ${
+                      isDarkMode ? 'text-gray-300 group-hover:text-gray-100' : 'text-gray-700'
+                    }`}>
                       Also generate images for all content posts
                     </span>
                   </div>
                 </label>
-                <p className="text-xs text-gray-500 mt-1 ml-6">
+                <p className={`text-xs mt-1 ml-6 ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                }`}>
                   Images will be generated automatically using your brand colors after content is created
                 </p>
               </div>
@@ -3091,7 +3249,11 @@ const ContentDashboard = () => {
                     setShowConfirmationModal(false)
                     setGenerateImagesWithContent(false)
                   }}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg focus:outline-none focus:ring-2 ${
+                    isDarkMode
+                      ? 'text-gray-300 bg-gray-700 border border-gray-600 hover:bg-gray-600 focus:ring-gray-400'
+                      : 'text-gray-700 bg-gray-100 border border-gray-300 hover:bg-gray-200 focus:ring-gray-500'
+                  }`}
                 >
                   Cancel
                 </button>
@@ -3121,12 +3283,20 @@ const ContentDashboard = () => {
       {/* Main Content */}
       <div className="md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden">
         {/* Scrollable Content */}
-        <div className="flex-1 p-4 lg:p-6 flex flex-col overflow-y-auto">
+        <div className={`flex-1 p-4 lg:p-6 flex flex-col overflow-y-auto custom-scrollbar ${
+          isDarkMode ? 'dark-mode' : 'light-mode'
+        }`}>
           {/* Status Message - Only show error messages */}
           {generationStatus === 'error' && (
-            <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800">
+            <div className={`mb-6 p-4 rounded-lg ${
+              isDarkMode
+                ? 'bg-red-900/20 border border-red-700 text-red-300'
+                : 'bg-red-50 border border-red-200 text-red-800'
+            }`}>
               <div className="flex items-center">
-                <RefreshCw className="w-5 h-5 mr-2" />
+                <RefreshCw className={`w-5 h-5 mr-2 ${
+                  isDarkMode ? 'text-red-400' : 'text-red-600'
+                }`} />
                 <span className="font-medium">{generationMessage}</span>
               </div>
             </div>
@@ -3141,19 +3311,27 @@ const ContentDashboard = () => {
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center">
                     <span className="text-white font-bold text-sm">E</span>
                   </div>
-                  <div className="bg-white rounded-lg px-4 py-3 shadow-md" style={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.15)' }}>
+                  <div className={`rounded-lg px-4 py-3 shadow-md ${
+                    isDarkMode ? 'bg-gray-800' : 'bg-white'
+                  }`} style={{ boxShadow: '0 0 8px rgba(0, 0, 0, 0.15)' }}>
                     {fetchingContent ? (
-                      <p className="text-sm text-black">
+                      <p className={`text-sm ${
+                        isDarkMode ? 'text-gray-200' : 'text-black'
+                      }`}>
                         Loading suggestions...
                       </p>
                     ) : (
                       <>
                         {availableChannels.length > 0 && (
                               <>
-                                <p className="text-sm text-black mb-2">
+                                <p className={`text-sm mb-2 ${
+                                  isDarkMode ? 'text-gray-200' : 'text-black'
+                                }`}>
                               Here are a few fresh post ideas for you!
                                 </p>
-                            <p className="text-sm text-gray-700 mb-3">
+                            <p className={`text-sm mb-3 ${
+                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
                               Take a look at the suggestions and see what fits your vibe. I've tried to keep them simple, engaging, and easy to post.
                                 </p>
                             {/* Channel Icons as Tabs */}
@@ -3166,24 +3344,26 @@ const ContentDashboard = () => {
                                             key={channel}
                                             onClick={() => setSelectedChannel(channel)}
                                     className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
-                                              isSelected 
+                                              isSelected
                                         ? 'bg-purple-50 border-purple-300 shadow-sm'
+                                        : isDarkMode
+                                        ? 'bg-gray-700 border-gray-600 hover:bg-gray-600 hover:border-gray-500'
                                         : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
                                             }`}
                                           >
                                     <span className={`flex-shrink-0 w-5 h-5 flex items-center justify-center ${
-                                      isSelected ? 'text-purple-600' : 'text-gray-600'
+                                      isSelected ? 'text-purple-600' : (isDarkMode ? 'text-gray-400' : 'text-gray-600')
                                     }`}>
                                               {getPlatformIcon(channel)}
                                             </span>
                                     <span className={`text-xs font-medium ${
-                                      isSelected ? 'text-purple-700' : 'text-gray-700'
+                                      isSelected ? 'text-purple-700' : (isDarkMode ? 'text-gray-300' : 'text-gray-700')
                                     }`}>
                                       {channel.charAt(0).toUpperCase() + channel.slice(1)}
                                             </span>
                                     {channelCount > 0 && (
                                       <span className={`text-xs ${
-                                        isSelected ? 'text-purple-600' : 'text-gray-500'
+                                        isSelected ? 'text-purple-600' : (isDarkMode ? 'text-gray-400' : 'text-gray-500')
                                       }`}>
                                         ({channelCount})
                                       </span>
@@ -3284,11 +3464,11 @@ const ContentDashboard = () => {
                       key={content.id} 
                       onClick={() => handleViewContent(content)}
                       className={`${theme.bg} rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg hover:scale-105 w-full flex flex-col shadow-md border cursor-pointer ${
-                        isApproved 
-                          ? 'border-green-500' 
+                        isApproved
+                          ? 'border-green-500'
                           : isScript && isDraft
                           ? 'border-purple-400 border-2' // Highlight script drafts with purple border
-                          : 'border-gray-200'
+                          : isDarkMode ? 'border-gray-600' : 'border-gray-200'
                       }`}
                     >
                       {/* Top: Logo + Business Name + Date/Time */}
@@ -4184,7 +4364,11 @@ const ContentDashboard = () => {
       {/* Edit Modal */}
       {editingContent && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto border border-purple-100">
+          <div className={`rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto custom-scrollbar ${
+            isDarkMode
+              ? 'bg-gray-800 border-gray-700 dark-mode'
+              : 'bg-white border-purple-100 light-mode'
+          }`}>
             <div className="p-8">
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center space-x-3">

@@ -7,10 +7,57 @@ import SideNavbar from './SideNavbar'
 import MobileNavigation from './MobileNavigation'
 import { Facebook, Instagram, Linkedin, Youtube, Building2, Hash, FileText, Video, X } from 'lucide-react'
 
+// Dark mode hook
+const useDarkMode = () => {
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Check localStorage for saved preference, default to light mode
+    return localStorage.getItem('darkMode') === 'true'
+  })
+
+  useEffect(() => {
+    localStorage.setItem('darkMode', isDarkMode.toString())
+    // Apply to document for global dark mode
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
+
+  // Listen for dark mode changes from navbar
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.detail && event.detail.key === 'darkMode') {
+        const newValue = event.detail.value === 'true'
+        setIsDarkMode(newValue)
+      }
+    }
+
+    // Also listen for direct localStorage changes (for cross-tab sync)
+    const handleLocalStorageChange = (e) => {
+      if (e.key === 'darkMode') {
+        const newValue = e.newValue === 'true'
+        setIsDarkMode(newValue)
+      }
+    }
+
+    window.addEventListener('localStorageChange', handleStorageChange)
+    window.addEventListener('storage', handleLocalStorageChange)
+
+    return () => {
+      window.removeEventListener('localStorageChange', handleStorageChange)
+      window.removeEventListener('storage', handleLocalStorageChange)
+    }
+  }, [])
+
+  return [isDarkMode, setIsDarkMode]
+}
+
 const PostSuggestionsDashboard = () => {
   console.log('PostSuggestionsDashboard rendering...')
 
   const { user } = useAuth()
+  const [isDarkMode, setIsDarkMode] = useDarkMode()
 
   // Custom scrollbar styles
   const scrollbarStyles = `
@@ -22,15 +69,15 @@ const PostSuggestionsDashboard = () => {
       background: transparent;
     }
     .scrollbar-transparent::-webkit-scrollbar-thumb {
-      background: rgba(156, 163, 175, 0.3);
+      background: ${isDarkMode ? 'rgba(107, 114, 128, 0.3)' : 'rgba(156, 163, 175, 0.3)'};
       border-radius: 4px;
     }
     .scrollbar-transparent::-webkit-scrollbar-thumb:hover {
-      background: rgba(156, 163, 175, 0.5);
+      background: ${isDarkMode ? 'rgba(107, 114, 128, 0.5)' : 'rgba(156, 163, 175, 0.5)'};
     }
     .scrollbar-transparent {
       scrollbar-width: thin;
-      scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+      scrollbar-color: ${isDarkMode ? 'rgba(107, 114, 128, 0.3)' : 'rgba(156, 163, 175, 0.3)'} transparent;
     }
   `
   const { showError } = useNotifications()
@@ -215,40 +262,42 @@ const PostSuggestionsDashboard = () => {
     console.log('Removed global wheel listener')
   }
 
-  // Platform icon helper
-  const getPlatformIcon = (platform) => {
+  // Platform icon helper with theme support
+  const getPlatformIcon = (platform, isInButton = false) => {
     const platformLower = platform?.toLowerCase()
+    const iconClass = `w-4 h-4 ${isInButton ? (isDarkMode ? 'text-gray-300' : 'text-gray-600') : (isDarkMode ? 'text-gray-400' : 'text-gray-500')}`
+
     switch (platformLower) {
       case 'facebook':
-        return <Facebook className="w-4 h-4" />
+        return <Facebook className={iconClass} />
       case 'instagram':
-        return <Instagram className="w-4 h-4" />
+        return <Instagram className={iconClass} />
       case 'linkedin':
-        return <Linkedin className="w-4 h-4" />
+        return <Linkedin className={iconClass} />
       case 'youtube':
-        return <Youtube className="w-4 h-4" />
+        return <Youtube className={iconClass} />
       case 'x':
       case 'twitter':
-        return <X className="w-4 h-4" />
+        return <X className={iconClass} />
       case 'google business':
       case 'google':
-        return <Building2 className="w-4 h-4" />
+        return <Building2 className={iconClass} />
       default:
-        return <Hash className="w-4 h-4" />
+        return <Hash className={iconClass} />
     }
   }
 
-  // Status color helper
+  // Status color helper with dark mode support
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case 'published':
-        return 'text-green-600'
+        return isDarkMode ? 'text-green-400' : 'text-green-600'
       case 'scheduled':
-        return 'text-blue-600'
+        return isDarkMode ? 'text-blue-400' : 'text-blue-600'
       case 'draft':
-        return 'text-gray-600'
+        return isDarkMode ? 'text-gray-400' : 'text-gray-600'
       default:
-        return 'text-gray-500'
+        return isDarkMode ? 'text-gray-400' : 'text-gray-500'
     }
   }
 
@@ -272,10 +321,10 @@ const PostSuggestionsDashboard = () => {
   if (!user) {
     console.log('User not authenticated, showing login message')
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} flex items-center justify-center`}>
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-4">Not Authenticated</h1>
-          <p className="text-gray-600">Please log in to access the dashboard.</p>
+          <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Please log in to access the dashboard.</p>
         </div>
       </div>
     )
@@ -284,7 +333,9 @@ const PostSuggestionsDashboard = () => {
   console.log('User authenticated, rendering main component')
 
   return (
-    <div className="h-screen bg-white overflow-hidden md:overflow-auto">
+    <div className={`h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-white'} overflow-hidden md:overflow-auto custom-scrollbar ${
+      isDarkMode ? 'dark-mode' : 'light-mode'
+    }`}>
       {/* Custom scrollbar styles */}
       <style dangerouslySetInnerHTML={{ __html: scrollbarStyles }} />
 
@@ -295,13 +346,15 @@ const PostSuggestionsDashboard = () => {
       <SideNavbar />
 
       {/* Main Content */}
-      <div className="md:ml-48 xl:ml-64 p-4 lg:p-6 overflow-y-auto">
+      <div className={`md:ml-48 xl:ml-64 p-4 lg:p-6 overflow-y-auto custom-scrollbar ${
+        isDarkMode ? 'dark-mode' : 'light-mode'
+      }`}>
         <div className="space-y-8">
 
           {/* Section 1: Suggested Posts */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">Suggested Posts</h2>
+              <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Suggested Posts</h2>
             </div>
 
             {/* Platform Filter Buttons */}
@@ -311,6 +364,8 @@ const PostSuggestionsDashboard = () => {
                 className={`px-4 py-2 rounded-lg border transition-all text-sm font-medium ${
                   postsFilter === 'all'
                     ? 'bg-purple-50 border-purple-300 text-purple-700 shadow-sm'
+                    : isDarkMode
+                    ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600 hover:border-gray-500'
                     : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300'
                 }`}
               >
@@ -327,10 +382,12 @@ const PostSuggestionsDashboard = () => {
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all text-sm font-medium ${
                       isSelected
                         ? 'bg-purple-50 border-purple-300 text-purple-700 shadow-sm'
+                        : isDarkMode
+                        ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600 hover:border-gray-500'
                         : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300'
                     }`}
                   >
-                    {getPlatformIcon(platform)}
+                    {getPlatformIcon(platform, true)}
                     <span className="capitalize">{platform}</span>
                   </button>
                 )
@@ -351,14 +408,22 @@ const PostSuggestionsDashboard = () => {
                       return (
                         <div
                           key={post.id}
-                          className="flex-shrink-0 w-80 bg-white rounded-xl shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow cursor-pointer"
+                          className={`flex-shrink-0 w-80 rounded-xl shadow-md border p-4 hover:shadow-lg transition-shadow cursor-pointer ${
+                            isDarkMode
+                              ? 'bg-gray-800 border-gray-700 shadow-gray-900/50 hover:shadow-gray-900/70'
+                              : 'bg-white border-gray-200'
+                          }`}
                         >
                           <div className="flex items-center gap-2 mb-3">
-                            {getPlatformIcon(normalizedPlatform)}
-                            <span className="text-sm font-medium text-gray-700 capitalize">
+                            {getPlatformIcon(normalizedPlatform, false)}
+                            <span className={`text-sm font-medium capitalize ${
+                              isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                            }`}>
                               {normalizedPlatform}
                             </span>
-                            <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(post.status)} bg-gray-100`}>
+                            <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(post.status)} ${
+                              isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                            }`}>
                               {post.status || 'Draft'}
                             </span>
                           </div>
@@ -375,15 +440,21 @@ const PostSuggestionsDashboard = () => {
                                 />
                               )}
 
-                              <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
+                              <h3 className={`font-semibold mb-2 line-clamp-2 ${
+                                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                              }`}>
                                 {post.title || 'Untitled Post'}
                               </h3>
 
-                              <p className="text-sm text-gray-600 line-clamp-3 mb-3">
+                              <p className={`text-sm line-clamp-3 mb-3 ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                              }`}>
                                 {post.content || post.description || 'No content available'}
                               </p>
 
-                          <div className="flex items-center justify-between text-xs text-gray-500">
+                          <div className={`flex items-center justify-between text-xs ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                          }`}>
                             <span>{new Date(post.scheduled_date || post.created_at).toLocaleDateString()}</span>
                             <button className="text-purple-600 hover:text-purple-700 font-medium">
                               View Details →
@@ -393,7 +464,9 @@ const PostSuggestionsDashboard = () => {
                       )
                     })
                   ) : (
-                    <div className="flex items-center justify-center py-8 text-gray-500">
+                    <div className={`flex items-center justify-center py-8 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`}>
                       Loading suggested content...
                     </div>
                   )}
@@ -403,7 +476,7 @@ const PostSuggestionsDashboard = () => {
 
           {/* Section 2: Suggested Blogs */}
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900">Suggested Blogs</h2>
+            <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Suggested Blogs</h2>
 
             <div
               className="overflow-x-auto pb-4 scrollbar-transparent"
@@ -415,12 +488,20 @@ const PostSuggestionsDashboard = () => {
                     suggestedBlogs.map((blog) => (
                       <div
                         key={blog.id}
-                        className="flex-shrink-0 w-80 bg-white rounded-xl shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow cursor-pointer"
+                        className={`flex-shrink-0 w-80 rounded-xl shadow-md border p-4 hover:shadow-lg transition-shadow cursor-pointer ${
+                          isDarkMode
+                            ? 'bg-gray-800 border-gray-700 shadow-gray-900/50 hover:shadow-gray-900/70'
+                            : 'bg-white border-gray-200'
+                        }`}
                       >
                         <div className="flex items-center gap-2 mb-3">
-                          <FileText className="w-4 h-4 text-blue-600" />
-                          <span className="text-sm font-medium text-gray-700">Blog Post</span>
-                          <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(blog.status)} bg-gray-100`}>
+                          <FileText className={`w-4 h-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                          <span className={`text-sm font-medium ${
+                            isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                          }`}>Blog Post</span>
+                          <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(blog.status)} ${
+                            isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                          }`}>
                             {blog.status || 'Draft'}
                           </span>
                         </div>
@@ -437,15 +518,21 @@ const PostSuggestionsDashboard = () => {
                                 />
                               )}
 
-                              <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
+                              <h3 className={`font-semibold mb-2 line-clamp-2 ${
+                                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                              }`}>
                                 {blog.title || 'Untitled Blog'}
                               </h3>
 
-                              <p className="text-sm text-gray-600 line-clamp-3 mb-3">
+                              <p className={`text-sm line-clamp-3 mb-3 ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                              }`}>
                                 {blog.content || blog.description || 'No content available'}
                               </p>
 
-                        <div className="flex items-center justify-between text-xs text-gray-500">
+                        <div className={`flex items-center justify-between text-xs ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                        }`}>
                           <span>{new Date(blog.scheduled_date || blog.created_at).toLocaleDateString()}</span>
                           <button className="text-purple-600 hover:text-purple-700 font-medium">
                             View Details →
@@ -454,7 +541,9 @@ const PostSuggestionsDashboard = () => {
                       </div>
                     ))
                   ) : (
-                    <div className="flex items-center justify-center py-8 text-gray-500">
+                    <div className={`flex items-center justify-center py-8 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`}>
                       Loading suggested content...
                     </div>
                   )}
@@ -464,13 +553,21 @@ const PostSuggestionsDashboard = () => {
 
           {/* Section 3: Suggested Videos */}
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900">Suggested Videos</h2>
+            <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Suggested Videos</h2>
 
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 p-8">
+            <div className={`rounded-xl shadow-md border p-8 ${
+              isDarkMode
+                ? 'bg-gray-800 border-gray-700 shadow-gray-900/50'
+                : 'bg-white border-gray-200'
+            }`}>
                 <div className="text-center">
-                  <Video className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Coming Soon</h3>
-                  <p className="text-gray-600">
+                  <Video className={`w-16 h-16 mx-auto mb-4 ${
+                    isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                  }`} />
+                  <h3 className={`text-lg font-semibold mb-2 ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}>Coming Soon</h3>
+                  <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
                     Video suggestions will be available in a future update.
                   </p>
                 </div>

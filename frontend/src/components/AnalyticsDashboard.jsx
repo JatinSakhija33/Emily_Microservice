@@ -10,11 +10,11 @@ import MainContentLoader from './MainContentLoader'
 import WebsiteAnalysisDashboard from './WebsiteAnalysisDashboard'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { 
-  Facebook, 
-  Instagram, 
-  Linkedin, 
-  Twitter, 
+import {
+  Facebook,
+  Instagram,
+  Linkedin,
+  Twitter,
   Youtube,
   RefreshCw,
   BarChart3,
@@ -28,18 +28,65 @@ import {
   TestTube
 } from 'lucide-react'
 
+// Dark mode hook
+const useDarkMode = () => {
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Check localStorage for saved preference, default to light mode
+    return localStorage.getItem('darkMode') === 'true'
+  })
+
+  useEffect(() => {
+    localStorage.setItem('darkMode', isDarkMode.toString())
+    // Apply to document for global dark mode
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
+
+  // Listen for dark mode changes from navbar
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.detail && event.detail.key === 'darkMode') {
+        const newValue = event.detail.value === 'true'
+        setIsDarkMode(newValue)
+      }
+    }
+
+    // Also listen for direct localStorage changes (for cross-tab sync)
+    const handleLocalStorageChange = (e) => {
+      if (e.key === 'darkMode') {
+        const newValue = e.newValue === 'true'
+        setIsDarkMode(newValue)
+      }
+    }
+
+    window.addEventListener('localStorageChange', handleStorageChange)
+    window.addEventListener('storage', handleLocalStorageChange)
+
+    return () => {
+      window.removeEventListener('localStorageChange', handleStorageChange)
+      window.removeEventListener('storage', handleLocalStorageChange)
+    }
+  }, [])
+
+  return [isDarkMode, setIsDarkMode]
+}
+
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com').replace(/\/$/, '')
 
 const AnalyticsDashboard = () => {
   const { user } = useAuth()
   const { showError, showSuccess } = useNotifications()
-  const { 
-    connections, 
-    posts, 
-    loading, 
-    fetchAllData, 
+  const [isDarkMode, setIsDarkMode] = useDarkMode()
+  const {
+    connections,
+    posts,
+    loading,
+    fetchAllData,
     updatePostsInCache,
-    getCacheStatus 
+    getCacheStatus
   } = useSocialMediaCache()
   const [refreshing, setRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
@@ -143,7 +190,45 @@ const AnalyticsDashboard = () => {
   }
 
   const getPlatformCardTheme = (platform) => {
-    const themes = {
+    const themes = isDarkMode ? {
+      // Dark mode themes
+      facebook: {
+        bg: 'bg-gray-800/80 backdrop-blur-sm',
+        border: 'border-blue-700/50',
+        iconBg: 'bg-blue-600',
+        text: 'text-blue-400',
+        accent: 'bg-blue-900/50'
+      },
+      instagram: {
+        bg: 'bg-gray-800/80 backdrop-blur-sm',
+        border: 'border-pink-700/50',
+        iconBg: 'bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500',
+        text: 'text-pink-400',
+        accent: 'bg-pink-900/50'
+      },
+      linkedin: {
+        bg: 'bg-gray-800/80 backdrop-blur-sm',
+        border: 'border-blue-700/50',
+        iconBg: 'bg-blue-700',
+        text: 'text-blue-400',
+        accent: 'bg-blue-900/50'
+      },
+      twitter: {
+        bg: 'bg-gray-800/80 backdrop-blur-sm',
+        border: 'border-sky-700/50',
+        iconBg: 'bg-sky-500',
+        text: 'text-sky-400',
+        accent: 'bg-sky-900/50'
+      },
+      youtube: {
+        bg: 'bg-gray-800/80 backdrop-blur-sm',
+        border: 'border-red-700/50',
+        iconBg: 'bg-red-600',
+        text: 'text-red-400',
+        accent: 'bg-red-900/50'
+      }
+    } : {
+      // Light mode themes
       facebook: {
         bg: 'bg-white/20 backdrop-blur-sm',
         border: 'border-blue-200/50',
@@ -180,13 +265,20 @@ const AnalyticsDashboard = () => {
         accent: 'bg-red-100/50'
       }
     }
-    return themes[platform?.toLowerCase()] || {
+
+    return themes[platform?.toLowerCase()] || (isDarkMode ? {
+      bg: 'bg-gray-800/80 backdrop-blur-sm',
+      border: 'border-gray-700/50',
+      iconBg: 'bg-gray-500',
+      text: 'text-gray-400',
+      accent: 'bg-gray-900/50'
+    } : {
       bg: 'bg-white/20 backdrop-blur-sm',
       border: 'border-gray-200/50',
       iconBg: 'bg-gray-500',
       text: 'text-gray-800',
       accent: 'bg-gray-100/50'
-    }
+    })
   }
 
   const formatEngagement = (count) => {
@@ -324,7 +416,7 @@ const AnalyticsDashboard = () => {
   const hasPosts = Object.keys(posts).length > 0
 
   return (
-    <div className="min-h-screen bg-white overflow-x-hidden">
+    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-white'} overflow-x-hidden`}>
       {/* Tooltip */}
       <Tooltip />
       
@@ -335,16 +427,24 @@ const AnalyticsDashboard = () => {
       {/* Main Content */}
       <div className="ml-0 md:ml-48 xl:ml-64 flex flex-col min-h-screen pt-16 md:pt-0 overflow-x-hidden max-w-full">
         {/* Header - Not fixed on mobile, fixed on desktop */}
-        <div className="md:fixed md:top-0 md:right-0 md:left-48 xl:left-64 bg-white shadow-sm border-b md:z-30 max-w-full">
+        <div className={`md:fixed md:top-0 md:right-0 md:left-48 xl:left-64 shadow-sm border-b md:z-30 max-w-full ${
+          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white'
+        }`}>
           <div className="px-1.5 sm:px-2 md:px-4 lg:px-6 pb-1.5 sm:pb-2 md:pb-3 lg:pb-4 max-w-full">
             <div className="flex flex-row items-center gap-1 sm:gap-1.5 md:gap-2 lg:gap-4 flex-nowrap max-w-full">
             {/* Tabs */}
-              <div className="flex space-x-0.5 sm:space-x-0.5 md:space-x-1 bg-gray-100 p-0.5 sm:p-0.5 md:p-1 rounded-lg flex-shrink-0 min-w-0">
+              <div className={`flex space-x-0.5 sm:space-x-0.5 md:space-x-1 p-0.5 sm:p-0.5 md:p-1 rounded-lg flex-shrink-0 min-w-0 ${
+                isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+              }`}>
                 <button
                   onClick={() => setActiveTab('website')}
                   className={`flex items-center justify-center space-x-0.5 sm:space-x-1 md:space-x-2 px-1 sm:px-1.5 md:px-2 lg:px-4 py-1 sm:py-1.5 md:py-2 rounded-md text-[9px] sm:text-[10px] md:text-xs lg:text-sm font-medium transition-all duration-200 flex-shrink-0 ${
                     activeTab === 'website'
-                      ? 'bg-white text-purple-600 shadow-sm'
+                      ? isDarkMode
+                        ? 'bg-gray-600 text-purple-400 shadow-sm'
+                        : 'bg-white text-purple-600 shadow-sm'
+                      : isDarkMode
+                      ? 'text-gray-400 hover:text-gray-200'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
@@ -356,7 +456,11 @@ const AnalyticsDashboard = () => {
                   onClick={() => setActiveTab('social')}
                   className={`flex items-center justify-center space-x-0.5 sm:space-x-1 md:space-x-2 px-1 sm:px-1.5 md:px-2 lg:px-4 py-1 sm:py-1.5 md:py-2 rounded-md text-[9px] sm:text-[10px] md:text-xs lg:text-sm font-medium transition-all duration-200 flex-shrink-0 ${
                     activeTab === 'social'
-                      ? 'bg-white text-purple-600 shadow-sm'
+                      ? isDarkMode
+                        ? 'bg-gray-600 text-purple-400 shadow-sm'
+                        : 'bg-white text-purple-600 shadow-sm'
+                      : isDarkMode
+                      ? 'text-gray-400 hover:text-gray-200'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
@@ -431,7 +535,7 @@ const AnalyticsDashboard = () => {
                   }
                 `}} />
                 <div className="flex items-center justify-center min-h-[300px] sm:min-h-[350px] md:min-h-[400px]">
-                  <p className="text-gray-600 text-xs sm:text-sm md:text-base lg:text-lg">
+                  <p className={`text-xs sm:text-sm md:text-base lg:text-lg ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                     Loading social media analytics
                     <span className="inline-block w-6 ml-1">
                       <span className="loading-dot-1">.</span>
@@ -445,9 +549,9 @@ const AnalyticsDashboard = () => {
               <>
                 {platformsWithPosts.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-64 sm:h-80 md:h-96 px-3 sm:px-4">
-                    <BarChart3 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 text-gray-300 mb-3 sm:mb-4" />
-                    <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-600 mb-1.5 sm:mb-2 text-center">No Analytics Data</h3>
-                    <p className="text-xs sm:text-sm md:text-base text-gray-500 text-center max-w-md px-2">
+                    <BarChart3 className={`w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 mb-3 sm:mb-4 ${isDarkMode ? 'text-gray-600' : 'text-gray-300'}`} />
+                    <h3 className={`text-base sm:text-lg md:text-xl font-semibold mb-1.5 sm:mb-2 text-center ${isDarkMode ? 'text-gray-100' : 'text-gray-600'}`}>No Analytics Data</h3>
+                    <p className={`text-xs sm:text-sm md:text-base text-center max-w-md px-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                       Connect your social media accounts to see performance insights and analytics.
                     </p>
                   </div>
@@ -456,7 +560,7 @@ const AnalyticsDashboard = () => {
               {/* Performance Insights Cards */}
               {insightsData && Object.keys(insightsData).length > 0 && (
                 <div className="overflow-x-hidden max-w-full">
-                  <h2 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 mb-3 sm:mb-4 md:mb-6">Performance Insights</h2>
+                  <h2 className={`text-base sm:text-lg md:text-xl font-bold mb-3 sm:mb-4 md:mb-6 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Performance Insights</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 md:gap-5 lg:gap-6 max-w-full">
                     {Object.entries(insightsData).map(([platform, data]) => {
                       const theme = getPlatformCardTheme(platform)
@@ -465,7 +569,7 @@ const AnalyticsDashboard = () => {
                       return (
                         <div key={platform} className={`${theme.bg} ${theme.border} border rounded-lg sm:rounded-xl shadow-sm hover:shadow-lg transition-all duration-300`}>
                           {/* Card Header */}
-                          <div className="p-2 sm:p-2.5 md:p-3 lg:p-4 border-b border-gray-200">
+                          <div className={`p-2 sm:p-2.5 md:p-3 lg:p-4 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-1.5 sm:space-x-2 md:space-x-3 min-w-0 flex-1">
                                 <div className={`w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 lg:w-10 lg:h-10 ${theme.iconBg} rounded-lg flex items-center justify-center flex-shrink-0`}>
@@ -477,12 +581,12 @@ const AnalyticsDashboard = () => {
                                   <h3 className={`text-xs sm:text-sm md:text-base font-semibold capitalize ${theme.text} truncate`}>
                                     {platform} Insights
                                   </h3>
-                                  <p className="text-[10px] sm:text-xs md:text-sm text-gray-500 truncate">Last 5 posts performance</p>
+                                  <p className={`text-[10px] sm:text-xs md:text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Last 5 posts performance</p>
                                 </div>
                               </div>
                               <div className="flex items-center space-x-0.5 sm:space-x-1 flex-shrink-0 ml-1 sm:ml-2">
-                                <BarChart3 className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5 lg:w-4 lg:h-4 text-gray-500" />
-                                <span className="text-[9px] sm:text-[10px] md:text-xs text-gray-600 hidden sm:inline">Analytics</span>
+                                <BarChart3 className={`w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-3.5 md:h-3.5 lg:w-4 lg:h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                                <span className={`text-[9px] sm:text-[10px] md:text-xs hidden sm:inline ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Analytics</span>
                               </div>
                             </div>
                           </div>
@@ -492,8 +596,8 @@ const AnalyticsDashboard = () => {
                             {/* Grouped Bar Chart */}
                             <div className="space-y-2 sm:space-y-2.5 md:space-y-3 lg:space-y-4">
                               <div className="flex items-center justify-between">
-                                <span className="text-[10px] sm:text-xs md:text-sm font-medium text-gray-700">Performance Metrics</span>
-                                <span className="text-[9px] sm:text-[10px] md:text-xs text-gray-500">Last 5 posts</span>
+                                <span className={`text-[10px] sm:text-xs md:text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>Performance Metrics</span>
+                                <span className={`text-[9px] sm:text-[10px] md:text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Last 5 posts</span>
                               </div>
                               
                               {/* Grouped Bar Chart */}
@@ -562,7 +666,7 @@ const AnalyticsDashboard = () => {
                                     return (
                                       <div key={index} className="flex items-center space-x-0.5 sm:space-x-1">
                                         <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 ${colors[index]} rounded-sm`}></div>
-                                        <span className="text-[9px] sm:text-[10px] md:text-xs text-gray-600">{metric.name}</span>
+                                        <span className={`text-[9px] sm:text-[10px] md:text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{metric.name}</span>
                                       </div>
                                     )
                                   })}
@@ -571,7 +675,7 @@ const AnalyticsDashboard = () => {
                             </div>
 
                             {/* Summary Stats */}
-                            <div className="mt-2 sm:mt-2.5 md:mt-3 lg:mt-4 pt-2 sm:pt-2.5 md:pt-3 lg:pt-4 border-t border-gray-200">
+                            <div className={`mt-2 sm:mt-2.5 md:mt-3 lg:mt-4 pt-2 sm:pt-2.5 md:pt-3 lg:pt-4 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                               <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:gap-3 lg:gap-4 text-center">
                                 {data.metrics.map((metric, index) => {
                                   const total = metric.data.reduce((a, b) => a + b, 0)
@@ -612,7 +716,11 @@ const AnalyticsDashboard = () => {
           
           {/* Last Updated Timestamp - Bottom Right - Hidden on mobile */}
           {lastRefresh && activeTab === 'social' && (
-            <div className="hidden sm:flex fixed bottom-4 right-4 text-xs sm:text-sm text-gray-500 bg-white/80 backdrop-blur-sm px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow-sm border">
+            <div className={`hidden sm:flex fixed bottom-4 right-4 text-xs sm:text-sm backdrop-blur-sm px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow-sm border ${
+              isDarkMode
+                ? 'text-gray-400 bg-gray-800/80 border-gray-700'
+                : 'text-gray-500 bg-white/80'
+            }`}>
               Last updated: {lastRefresh.toLocaleTimeString()}
             </div>
           )}
@@ -622,10 +730,10 @@ const AnalyticsDashboard = () => {
       {/* Test Morning Message Modal */}
       {showTestModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+          <div className={`rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
-              <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900">
+            <div className={`flex items-center justify-between p-4 sm:p-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+              <h2 className={`text-lg sm:text-xl md:text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
                 Morning Message Test
               </h2>
               <button
@@ -633,19 +741,21 @@ const AnalyticsDashboard = () => {
                   setShowTestModal(false)
                   setTestMessage('')
                 }}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
               >
-                <X className="w-5 h-5 text-gray-500" />
+                <X className={`w-5 h-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
               </button>
             </div>
 
             {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            <div className={`flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar ${
+              isDarkMode ? 'dark-mode' : 'light-mode'
+            }`}>
               {loadingTest ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="flex flex-col items-center space-y-4">
                     <RefreshCw className="w-8 h-8 text-purple-600 animate-spin" />
-                    <p className="text-gray-600">Generating morning message...</p>
+                    <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Generating morning message...</p>
                   </div>
                 </div>
               ) : testMessage ? (
@@ -654,8 +764,10 @@ const AnalyticsDashboard = () => {
                     remarkPlugins={[remarkGfm]}
                     components={{
                       table: ({ children }) => (
-                        <div className="overflow-x-auto my-4">
-                          <table className="min-w-full border-collapse border border-gray-300">
+                        <div className={`overflow-x-auto my-4 custom-scrollbar ${
+                          isDarkMode ? 'dark-mode' : 'light-mode'
+                        }`}>
+                          <table className={`min-w-full border-collapse border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`}>
                             {children}
                           </table>
                         </div>
@@ -666,32 +778,32 @@ const AnalyticsDashboard = () => {
                         </thead>
                       ),
                       th: ({ children }) => (
-                        <th className="border border-gray-300 px-4 py-2 text-left font-semibold">
+                        <th className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-4 py-2 text-left font-semibold`}>
                           {children}
                         </th>
                       ),
                       td: ({ children }) => (
-                        <td className="border border-gray-300 px-4 py-2">
+                        <td className={`border ${isDarkMode ? 'border-gray-600' : 'border-gray-300'} px-4 py-2`}>
                           {children}
                         </td>
                       ),
                       tbody: ({ children }) => (
-                        <tbody className="bg-white">
+                        <tbody className={isDarkMode ? 'bg-gray-800' : 'bg-white'}>
                           {children}
                         </tbody>
                       ),
                       tr: ({ children }) => (
-                        <tr className="hover:bg-gray-50">
+                        <tr className={isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}>
                           {children}
                         </tr>
                       ),
                       p: ({ children }) => (
-                        <p className="mb-2 text-gray-700">
+                        <p className={`mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                           {children}
                         </p>
                       ),
                       strong: ({ children }) => (
-                        <strong className="font-semibold text-gray-900">
+                        <strong className={`font-semibold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
                           {children}
                         </strong>
                       ),
@@ -701,20 +813,24 @@ const AnalyticsDashboard = () => {
                   </ReactMarkdown>
                 </div>
               ) : (
-                <div className="text-center py-12 text-gray-500">
+                <div className={`text-center py-12 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   Click "Generate" to test the morning message
                 </div>
               )}
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 p-4 sm:p-6 border-t border-gray-200">
+            <div className={`flex items-center justify-end gap-3 p-4 sm:p-6 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
               <button
                 onClick={() => {
                   setShowTestModal(false)
                   setTestMessage('')
                 }}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors font-medium"
+                className={`px-4 py-2 rounded-lg transition-colors font-medium ${
+                  isDarkMode
+                    ? 'text-gray-300 bg-gray-700 hover:bg-gray-600'
+                    : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+                }`}
               >
                 Close
               </button>
