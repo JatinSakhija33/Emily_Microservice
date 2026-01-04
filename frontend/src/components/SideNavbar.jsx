@@ -184,11 +184,12 @@ const SideNavbar = () => {
       href: '/social',
       icon: TrendingUp
     },
-    {
-      name: 'Analytics',
-      href: '/analytics',
-      icon: BarChart3
-    },
+    // Temporarily hidden - Analytics dashboard
+    // {
+    //   name: 'Analytics',
+    //   href: '/analytics',
+    //   icon: BarChart3
+    // },
     // {
     //   name: 'Ads',
     //   href: '/ads',
