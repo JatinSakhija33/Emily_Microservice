@@ -6,7 +6,7 @@ Handles chat interactions with the ATSN agent (Content & Lead Management)
 import os
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -79,7 +79,7 @@ def get_or_create_conversation(user_id: str, session_id: str = None) -> dict:
     try:
         # If no session_id provided, check if user has an active conversation today
         if not session_id:
-            today = datetime.now().date()
+            today = datetime.now(timezone.utc).date()
             result = supabase_client.table("atsn_conversations").select("id, session_id").eq("user_id", user_id).eq("conversation_date", today.isoformat()).eq("is_active", True).execute()
 
             if result.data and len(result.data) > 0:
@@ -92,7 +92,7 @@ def get_or_create_conversation(user_id: str, session_id: str = None) -> dict:
         conversation_data = {
             "user_id": user_id,
             "session_id": session_id,
-            "conversation_date": datetime.now().date().isoformat(),
+            "conversation_date": datetime.now(timezone.utc).date().isoformat(),
             "primary_agent_name": "atsn",
             "is_active": True
         }
@@ -342,8 +342,7 @@ async def get_atsn_conversations(
             if date:
                 filter_date = date
             else:
-                from datetime import datetime
-                filter_date = datetime.now().strftime("%Y-%m-%d")
+                filter_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
             logger.info(f"Fetching ATSN conversations for user {user_id}, date={filter_date}, limit={limit}")
             # Get conversations filtered by date
