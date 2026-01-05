@@ -125,20 +125,6 @@ export const leadsAPI = {
   },
 
   /**
-   * Update lead details (name, email, phone, source, etc.)
-   * @param {string} leadId - Lead ID
-   * @param {Object} leadData - Lead data to update
-   * @param {string} leadData.name - Lead name
-   * @param {string} leadData.email - Lead email
-   * @param {string} leadData.phone_number - Lead phone number
-   * @param {string} leadData.source_platform - Source platform
-   * @returns {Promise} API response
-   */
-  updateLead: (leadId, leadData) => {
-    return api.put(`/leads/${leadId}`, leadData)
-  },
-
-  /**
    * Add a remark to a lead without changing status
    * @param {string} leadId - Lead ID
    * @param {string} remarks - Remarks to add

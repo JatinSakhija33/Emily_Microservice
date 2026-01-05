@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
-import { Send, ArrowRight, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone, Heart, X } from 'lucide-react'
+import { Send, ArrowRight, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone, Heart } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import ContentCard from './ContentCard'
@@ -678,11 +678,6 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     }
   }
 
-  const sendMessage = async (message) => {
-    setInputMessage(message)
-    await handleSendMessage()
-  }
-
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return
 
@@ -1270,24 +1265,16 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     setIsDeleting(true)
 
     try {
-      // Directly call bulk delete API instead of sending chatbot messages
-      await leadsAPI.bulkDeleteLeads(selectedLeads)
-
-      showSuccess(`Successfully deleted ${selectedLeads.length} lead${selectedLeads.length > 1 ? 's' : ''}`)
-      setSelectedLeads([]) // Clear selection after deletion
-
-      // Refresh the current view to reflect the changes
-      // This will trigger a new message to show updated leads
-      if (messages.length > 0) {
-        const lastMessage = messages[messages.length - 1]
-        if (lastMessage.intent === 'view_leads' || lastMessage.intent === 'delete_leads') {
-          // Trigger a refresh by sending a new view leads command
-          await sendMessage('Show my leads')
-        }
+      for (const leadId of selectedLeads) {
+        // Send delete message for each selected lead
+        await sendMessage(`Delete lead with ID: ${leadId}`)
       }
+
+      showSuccess(`Successfully initiated deletion of ${selectedLeads.length} lead${selectedLeads.length > 1 ? 's' : ''}`)
+      setSelectedLeads([]) // Clear selection after deletion
     } catch (error) {
       console.error('Error deleting leads:', error)
-      showError('Failed to delete leads. Please try again.')
+      showError('Failed to delete some leads. Please try again.')
     } finally {
       setIsDeleting(false)
     }
@@ -3893,7 +3880,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                 }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
-                <X className="w-6 h-6" />
+                <AlertCircle className="w-6 h-6" />
               </button>
             </div>
 
@@ -4044,109 +4031,86 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       {/* Edit Lead Modal */}
       {showEditLeadModal && editLeadData && (
-        <div className={`fixed inset-0 ${isDarkMode ? 'bg-black bg-opacity-75' : 'bg-black bg-opacity-50'} flex items-center justify-center z-50`}>
-          <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto`}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Edit Lead</h3>
+              <h3 className="text-xl font-semibold text-gray-900">Edit Lead</h3>
               <button
                 onClick={() => {
                   setShowEditLeadModal(false)
                   setEditLeadData(null)
                 }}
-                className={`${isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'} transition-colors`}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
-                <X className="w-6 h-6" />
+                <AlertCircle className="w-6 h-6" />
               </button>
             </div>
 
-            <form onSubmit={async (e) => {
+            <form onSubmit={(e) => {
               e.preventDefault()
-              try {
-                const formData = new FormData(e.target)
-
-                // Update lead status if it changed
-                const newStatus = formData.get('status')
-                const remarks = formData.get('remarks')
-
-                if (newStatus !== editLeadData.status) {
-                  await leadsAPI.updateLeadStatus(editLeadData.id, newStatus, remarks || null)
-                }
-
-                // Update other lead details directly in database
-                const updatedLeadData = {
-                  name: formData.get('name'),
-                  email: formData.get('email'),
-                  phone_number: formData.get('phone'),
-                  source_platform: formData.get('source_platform')
-                }
-
-                // Direct API call to update lead details
-                await leadsAPI.updateLead(editLeadData.id, updatedLeadData)
-
-                showSuccess('Lead updated successfully')
-
-                setShowEditLeadModal(false)
-                setEditLeadData(null)
-                setSelectedLeads([])
-
-                // Refresh the current view to reflect the changes
-                if (messages.length > 0) {
-                  const lastMessage = messages[messages.length - 1]
-                  if (lastMessage.intent === 'view_leads' || lastMessage.intent === 'delete_leads') {
-                    // Trigger a refresh by sending a new view leads command
-                    await sendMessage('Show my leads')
-                  }
-                }
-              } catch (error) {
-                console.error('Error updating lead:', error)
-                showError('Failed to update lead. Please try again.')
+              const formData = new FormData(e.target)
+              const updatedLead = {
+                lead_id: editLeadData.id,
+                new_lead_name: formData.get('name'),
+                new_lead_email: formData.get('email'),
+                new_lead_phone: formData.get('phone'),
+                new_lead_status: formData.get('status'),
+                new_lead_source: formData.get('source_platform'),
+                new_remarks: formData.get('remarks')
               }
+
+              // Send edit message
+              sendMessage(`Update lead: ${JSON.stringify(updatedLead)}`)
+
+              setShowEditLeadModal(false)
+              setEditLeadData(null)
+              setSelectedLeads([])
             }} className="space-y-4">
               <div>
-                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Lead Name
                 </label>
                 <input
                   type="text"
                   name="name"
                   defaultValue={editLeadData.name}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDarkMode ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400' : 'border-gray-300 bg-white text-gray-900'}`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   required
                 />
               </div>
 
               <div>
-                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address
                 </label>
                 <input
                   type="email"
                   name="email"
                   defaultValue={editLeadData.email}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDarkMode ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400' : 'border-gray-300 bg-white text-gray-900'}`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Phone Number
                 </label>
                 <input
                   type="tel"
                   name="phone"
                   defaultValue={editLeadData.phone}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDarkMode ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400' : 'border-gray-300 bg-white text-gray-900'}`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Status
                 </label>
                 <select
                   name="status"
                   defaultValue={editLeadData.status}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDarkMode ? 'border-gray-600 bg-gray-700 text-gray-200' : 'border-gray-300 bg-white text-gray-900'}`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="new">New</option>
                   <option value="contacted">Contacted</option>
@@ -4159,13 +4123,13 @@ const ATSNChatbot = ({ externalConversations = null }) => {
               </div>
 
               <div>
-                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Source Platform
                 </label>
                 <select
                   name="source_platform"
                   defaultValue={editLeadData.source_platform}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDarkMode ? 'border-gray-600 bg-gray-700 text-gray-200' : 'border-gray-300 bg-white text-gray-900'}`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="Website">Website</option>
                   <option value="Facebook">Facebook</option>
@@ -4180,14 +4144,14 @@ const ATSNChatbot = ({ externalConversations = null }) => {
               </div>
 
               <div>
-                <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Remarks
                 </label>
                 <textarea
                   name="remarks"
                   defaultValue={editLeadData.last_remark}
                   rows={3}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDarkMode ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400' : 'border-gray-300 bg-white text-gray-900'}`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Add any additional notes or remarks..."
                 />
               </div>
@@ -4199,13 +4163,13 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                     setShowEditLeadModal(false)
                     setEditLeadData(null)
                   }}
-                  className={`flex-1 px-4 py-2 rounded-md transition-colors ${isDarkMode ? 'text-gray-300 bg-gray-700 hover:bg-gray-600' : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className={`flex-1 px-4 py-2 rounded-md transition-colors ${isDarkMode ? 'bg-blue-700 hover:bg-blue-800' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-md transition-colors"
                 >
                   Update Lead
                 </button>

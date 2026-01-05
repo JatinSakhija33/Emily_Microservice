@@ -2512,7 +2512,6 @@ User conversation:
 {sanitized_conversation}
 
 Extract these fields if mentioned:
-- lead_id: UUID of the lead to delete (if mentioned directly)
 - lead_name: Name of lead to delete
 - lead_phone: Phone of lead to delete
 - lead_email: Email of lead to delete
@@ -2522,7 +2521,6 @@ Examples:
 
 Query: "Delete the lead John Doe"
 {{
-    "lead_id": null,
     "lead_name": "John Doe",
     "lead_phone": null,
     "lead_email": null,
@@ -2531,25 +2529,14 @@ Query: "Delete the lead John Doe"
 
 Query: "Remove lead with email atsn@gmail.com"
 {{
-    "lead_id": null,
     "lead_name": null,
     "lead_phone": null,
     "lead_email": "spam@example.com",
     "lead_status": null
 }}
 
-Query: "Delete lead with ID: 123e4567-e89b-12d3-a456-426614174000"
-{{
-    "lead_id": "123e4567-e89b-12d3-a456-426614174000",
-    "lead_name": null,
-    "lead_phone": null,
-    "lead_email": null,
-    "lead_status": null
-}}
-
 Query: "Delete all lost leads"
 {{
-    "lead_id": null,
     "lead_name": null,
     "lead_phone": null,
     "lead_email": null,
@@ -4619,21 +4606,21 @@ def complete_edit_leads_payload(state: AgentState) -> AgentState:
 
 def complete_delete_leads_payload(state: AgentState) -> AgentState:
     """Complete delete_leads payload"""
-    # Accept either lead_id OR lead_name as sufficient identifier
-    has_lead_id = state.payload.get('lead_id') and state.payload['lead_id'].strip()
-    has_lead_name = state.payload.get('lead_name') and state.payload['lead_name'].strip()
-
-    if has_lead_id or has_lead_name:
+    required_fields = ["lead_name"]
+    clarifications = FIELD_CLARIFICATIONS.get("delete_leads", {})
+    
+    missing_fields = [
+        f for f in required_fields 
+        if f not in state.payload or state.payload.get(f) is None or not state.payload.get(f)
+    ]
+    
+    if not missing_fields:
         state.payload_complete = True
         state.current_step = "action_execution"
         print(" Delete leads payload complete")
         return state
-
-    # If neither ID nor name is provided, we need clarification
-    clarifications = FIELD_CLARIFICATIONS.get("delete_leads", {})
-
-    # Ask for lead_name as the primary identifier (same as before)
-    next_field = "lead_name"
+    
+    next_field = missing_fields[0]
     clarification_data = clarifications.get(next_field, {})
 
     if isinstance(clarification_data, dict):
@@ -7852,90 +7839,26 @@ Updates applied:
 
 
 def handle_delete_leads(state: AgentState) -> AgentState:
-    """Delete lead with database removal"""
+    """Delete lead"""
     payload = state.payload
-
-    # Check if payload is complete before proceeding
-    if not state.payload_complete:
-        state.result = "Lead deletion payload is not complete. Please provide lead identification first."
-        return state
 
     # Set agent name to Chase
     payload['agent_name'] = 'chase'
+    
+    # Get original contact info for display
+    display_email = getattr(state, 'temp_delete_emails', [None])[0] or payload.get('lead_email')
+    display_phone = getattr(state, 'temp_delete_phones', [None])[0] or payload.get('lead_phone')
 
-    # Ensure we have user_id
-    if not state.user_id:
-        state.result = "User authentication required."
-        return state
+    state.result = f"""⚠️ Lead deletion prepared
 
-    # Get lead identification - prefer ID, fallback to name/email/phone search
-    lead_id = payload.get('lead_id')
-    lead_name = payload.get('lead_name')
-    lead_email = payload.get('lead_email')
-    lead_phone = payload.get('lead_phone')
+Lead to delete:
+- Name: {payload.get('lead_name')}
+- Email: {display_email}
+- Phone: {display_phone}
 
-    if not lead_id and not lead_name and not lead_email and not lead_phone:
-        state.result = "No lead identification provided. Please specify lead ID, name, email, or phone."
-        return state
-
-    try:
-        # Build query to find the lead
-        query = supabase.table("leads").select("*").eq("user_id", state.user_id)
-
-        if lead_id:
-            # Direct ID lookup
-            query = query.eq("id", lead_id)
-        else:
-            # Search by name, email, phone
-            if lead_name:
-                query = query.ilike("name", f"%{lead_name}%")
-            if lead_email:
-                query = query.ilike("email", f"%{lead_email}%")
-            if lead_phone:
-                query = query.ilike("phone_number", f"%{lead_phone}%")
-
-        # Execute the query to find leads
-        result = query.execute()
-
-        if not result.data or len(result.data) == 0:
-            state.result = f"No lead found matching the specified criteria."
-            return state
-
-        if len(result.data) > 1:
-            # Multiple matches - show all and ask for clarification
-            lead_list = "\n".join([f"- {lead['name']} ({lead['email'] or 'no email'})" for lead in result.data[:5]])
-            state.result = f"Multiple leads found. Please be more specific:\n{lead_list}"
-            return state
-
-        # Single lead found - proceed with deletion
-        lead_to_delete = result.data[0]
-        lead_id_to_delete = lead_to_delete["id"]
-
-        # Perform the actual deletion
-        delete_result = supabase.table("leads").delete().eq("id", lead_id_to_delete).eq("user_id", state.user_id).execute()
-
-        if delete_result.data:
-            # Set success intent for frontend
-            state.intent = "lead_deleted"
-
-            # Success message
-            base_message = f"Successfully deleted lead '{lead_to_delete['name']}'"
-
-            state.result = generate_personalized_message(
-                base_message=base_message,
-                user_context=state.user_query,
-                message_type="success"
-            )
-
-            return state
-        else:
-            state.result = "Failed to delete lead from database."
-            return state
-
-    except Exception as e:
-        logger.error(f"Error deleting lead: {e}")
-        state.result = f"Error deleting lead: {str(e)}"
-        return state
+Status: Awaiting confirmation"""
+    
+    return state
 
 
 def handle_follow_up_leads(state: AgentState) -> AgentState:

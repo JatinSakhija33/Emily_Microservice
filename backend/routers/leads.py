@@ -1636,12 +1636,6 @@ async def add_remark(
 class UpdateFollowUpRequest(BaseModel):
     follow_up_at: Optional[str] = None  # ISO format datetime string
 
-class UpdateLeadRequest(BaseModel):
-    name: Optional[str] = None
-    email: Optional[str] = None
-    phone_number: Optional[str] = None
-    source_platform: Optional[str] = None
-
 @router.put("/{lead_id}/follow-up")
 async def update_follow_up(
     lead_id: str,
@@ -1671,53 +1665,11 @@ async def update_follow_up(
             raise HTTPException(status_code=500, detail="Failed to update follow-up")
         
         return {"success": True, "follow_up_at": result.data[0].get("follow_up_at")}
-
+        
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error updating follow-up: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.put("/{lead_id}")
-async def update_lead(
-    lead_id: str,
-    request: UpdateLeadRequest,
-    current_user: dict = Depends(get_current_user)
-):
-    """Update lead details (name, email, phone, source)"""
-    try:
-        # Verify lead belongs to user
-        lead = supabase_admin.table("leads").select("*").eq("id", lead_id).eq("user_id", current_user["id"]).execute()
-        if not lead.data:
-            raise HTTPException(status_code=404, detail="Lead not found")
-
-        # Build update data from request fields
-        update_data = {
-            "updated_at": datetime.now().isoformat()
-        }
-
-        # Only update fields that are provided
-        if request.name is not None:
-            update_data["name"] = request.name.strip()
-        if request.email is not None:
-            update_data["email"] = request.email.lower() if request.email else None
-        if request.phone_number is not None:
-            update_data["phone_number"] = request.phone_number
-        if request.source_platform is not None:
-            update_data["source_platform"] = request.source_platform.strip().lower()
-
-        # Perform the update
-        result = supabase_admin.table("leads").update(update_data).eq("id", lead_id).execute()
-
-        if not result.data:
-            raise HTTPException(status_code=500, detail="Failed to update lead")
-
-        return {"success": True, "lead": result.data[0]}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating lead: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{lead_id}")

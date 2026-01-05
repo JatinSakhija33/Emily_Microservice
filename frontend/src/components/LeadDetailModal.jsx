@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import {
-  X,
-  Mail,
-  Phone,
-  Facebook,
+import { 
+  X, 
+  Mail, 
+  Phone, 
+  Facebook, 
   Instagram,
   User,
   Calendar,
@@ -840,7 +840,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                       className="absolute top-full mt-2 left-0 w-full min-w-[160px] z-50"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className={`${isDarkMode ? 'bg-gray-800/95 backdrop-blur-lg border border-gray-600/40' : 'bg-white/95 backdrop-blur-lg border border-white/40'} rounded-lg shadow-2xl overflow-hidden ring-1 ring-black/5`}>
+                      <div className="bg-white/95 backdrop-blur-lg border border-white/40 rounded-lg shadow-2xl overflow-hidden ring-1 ring-black/5">
                         <div className="py-1">
                           {[
                             { value: 'new', label: 'New' },
@@ -861,11 +861,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                               disabled={updatingStatus || showRemarksInput}
                               className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors flex items-center space-x-2 ${
                                 (pendingStatus || selectedStatus) === option.value
-                                  ? isDarkMode
-                                    ? 'bg-purple-900/50 text-purple-300'
-                                    : 'bg-purple-100 text-purple-700'
-                                  : isDarkMode
-                                  ? 'text-gray-300 hover:bg-purple-900/30 hover:text-purple-300'
+                                  ? 'bg-purple-100 text-purple-700'
                                   : 'text-gray-700 hover:bg-purple-50 hover:text-purple-700'
                               } ${updatingStatus ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                             >
