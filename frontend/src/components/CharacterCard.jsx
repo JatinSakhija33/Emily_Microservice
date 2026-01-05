@@ -11,7 +11,7 @@ const CharacterCard = ({ agentName, isVisible = false, position = { x: 0, y: 0 }
         }
       case 'leo':
         return {
-          logo: '/leo_logo.jpg',
+          logo: '/leo_logo.png',
           name: 'Leo',
           abilities: 'Content Creator | Creative Director. Specializes in crafting engaging content, writing compelling copy, and designing visuals that drive audience engagement.'
         }
@@ -109,7 +109,7 @@ const CharacterCard = ({ agentName, isVisible = false, position = { x: 0, y: 0 }
                 <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
                   <div className="grid grid-cols-2 gap-1">
                     <img src="/emily_icon.png" alt="E" className="w-5 h-5 rounded-full object-cover" />
-                    <img src="/leo_logo.jpg" alt="L" className="w-5 h-5 rounded-full object-cover" />
+                    <img src="/leo_logo.png" alt="L" className="w-5 h-5 rounded-full object-cover" />
                     <img src="/chase_logo.png" alt="C" className="w-5 h-5 rounded-full object-cover" />
                     <div className="w-5 h-5 rounded-full bg-white/30 flex items-center justify-center">
                       <span className="text-xs font-bold text-white">A</span>
