@@ -1633,14 +1633,36 @@ def generate_oauth_url(platform: str, state: str) -> str:
         return f"{base_url}?client_id={client_id}&redirect_uri={instagram_redirect_uri}&state={state}&scope={scope_string}"
 
     elif platform == 'linkedin':
-        # LinkedIn scopes for both personal and page management:
-        # - openid, profile, email: Basic user info
-        # - w_member_social: Post, comment, and react on personal profile
-        # - w_organization_social: Post, comment, and react on behalf of organizations
-        # - r_organization_social: Read organization data
-        # - rw_organization_admin: Read and write organization data
-        oauth_url = f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social%20w_organization_social%20r_organization_social%20rw_organization_admin"
-        print(f"🔗 Generated LinkedIn OAuth URL: {oauth_url}")
+        # Detect environment (localhost vs production) for LinkedIn
+        environment = os.getenv('ENVIRONMENT', 'development').lower()
+        is_localhost = environment == 'development' or 'localhost' in os.getenv('API_BASE_URL', '').lower()
+
+        # If redirect_uri is not properly set for localhost, construct it
+        if is_localhost and redirect_uri and 'localhost' not in redirect_uri:
+            print(f"[OAUTH] LinkedIn development mode detected, using localhost redirect")
+            api_base_url = os.getenv('API_BASE_URL', 'http://localhost:8000').rstrip('/')
+            redirect_uri = f"{api_base_url}/connections/auth/linkedin/callback"
+            print(f"[OAUTH] LinkedIn redirect URI set to: {redirect_uri}")
+
+        # LinkedIn scopes - Only request basic approved scopes initially
+        # - openid, profile, email: Basic user info (usually auto-approved)
+        # - w_member_social: Post to personal profile (needs LinkedIn approval)
+        # Note: Organization scopes require special approval and are disabled by default
+        basic_scopes = "openid%20profile%20email%20w_member_social"
+
+        # Check if organization scopes are explicitly enabled (default to false for basic functionality)
+        include_org_scopes = os.getenv('LINKEDIN_INCLUDE_ORG_SCOPES', 'false').lower() == 'true'
+
+        if include_org_scopes:
+            # Include organization scopes only if explicitly enabled
+            full_scopes = f"{basic_scopes}%20w_organization_social%20r_organization_social%20rw_organization_admin"
+            print(f"[OAUTH] LinkedIn organization scopes included")
+        else:
+            full_scopes = basic_scopes
+            print(f"[OAUTH] LinkedIn using basic scopes only (organization scopes disabled)")
+
+        oauth_url = f"{base_url}?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope={full_scopes}"
+        print(f"[OAUTH] Generated LinkedIn OAuth URL: {oauth_url}")
         return oauth_url
 
     elif platform == 'twitter':
@@ -3924,11 +3946,26 @@ async def test_linkedin_connection():
         
         
         
-        # Generate a test OAuth URL
+        # Generate a test OAuth URL with environment-based redirect URI
 
         state = generate_oauth_state()
 
-        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={api_base_url}/connections/auth/linkedin/callback&state={state}&scope=openid%20profile%20email%20w_member_social"
+        # Use environment-based logic for redirect URI
+        environment = os.getenv('ENVIRONMENT', 'development').lower()
+        is_localhost = environment == 'development' or 'localhost' in api_base_url.lower()
+
+        if is_localhost and api_base_url:
+            redirect_uri = f"{api_base_url}/connections/auth/linkedin/callback"
+        elif api_base_url:
+            redirect_uri = f"{api_base_url}/connections/auth/linkedin/callback"
+        else:
+            # Fallback based on environment
+            if is_localhost:
+                redirect_uri = "http://localhost:8000/connections/auth/linkedin/callback"
+            else:
+                redirect_uri = "https://agent-emily.onrender.com/connections/auth/linkedin/callback"
+
+        test_oauth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={linkedin_client_id}&redirect_uri={redirect_uri}&state={state}&scope=openid%20profile%20email%20w_member_social"
 
         
         
