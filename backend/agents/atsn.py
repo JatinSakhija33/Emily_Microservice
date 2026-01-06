@@ -1544,24 +1544,28 @@ def classify_intent(state: AgentState) -> AgentState:
     
 Available intents:
 1. greeting - User is greeting (hi, hello, good morning, etc.)
-2. create_content - Creating new content (posts, videos, emails, messages)
-3. edit_content - Editing existing content
-4. delete_content - Deleting content
-5. view_content - Viewing/listing content
-6. publish_content - Publishing content to platforms
-7. schedule_content - Scheduling content for future publishing
-8. create_leads - Creating new leads
-9. view_leads - Viewing/listing leads
-10. edit_leads - Editing existing leads
-11. delete_leads - Deleting leads
-12. follow_up_leads - Following up with leads
-13. view_insights - Viewing insights and metrics
-14. view_analytics - Viewing analytics data
-15. general_talks - General conversation not related to the above tasks
+2. create_content - Creating new content (posts, videos, emails, messages) - SINGLE post
+3. generate_weekly_content - Generating weekly/monthly content calendar or bulk content (multiple posts, content strategy, weekly planning)
+4. edit_content - Editing existing content
+5. delete_content - Deleting content
+6. view_content - Viewing/listing content
+7. publish_content - Publishing content to platforms
+8. schedule_content - Scheduling content for future publishing
+9. create_leads - Creating new leads
+10. view_leads - Viewing/listing leads
+11. edit_leads - Editing existing leads
+12. delete_leads - Deleting leads
+13. follow_up_leads - Following up with leads
+14. view_insights - Viewing insights and metrics
+15. view_analytics - Viewing analytics data
+16. general_talks - General conversation not related to the above tasks
+
+IMPORTANT: If user asks for "weekly content", "content calendar", "bulk content", "generate multiple posts", "content strategy", "weekly planning", or similar bulk/weekly generation requests, return "generate_weekly_content".
+For single post creation, return "create_content".
 
 User query: {state.user_query}
 
-Return ONLY the intent name (e.g., "create_content", "greeting", "general_talks", etc.) without any explanation.
+Return ONLY the intent name (e.g., "create_content", "generate_weekly_content", "greeting", "general_talks", etc.) without any explanation.
 If the query doesn't match any specific task, return "general_talks"."""
 
     try:
@@ -4939,6 +4943,8 @@ async def execute_action(state: AgentState) -> AgentState:
         state = handle_general_talks(state)
     elif intent == "create_content":
         state = await handle_create_content(state)
+    elif intent == "generate_weekly_content":
+        state = await handle_generate_weekly_content(state)
     elif intent == "edit_content":
         state = handle_edit_content(state)
     elif intent == "delete_content":

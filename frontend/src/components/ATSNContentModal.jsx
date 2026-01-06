@@ -23,7 +23,7 @@ const useStorageListener = (key, callback) => {
 
     const handleCustomChange = (e) => {
       if (e.detail.key === key) {
-        callback(e.detail.value === 'true')
+        callback(e.detail.newValue === 'true')
       }
     }
 
@@ -62,6 +62,15 @@ const ATSNContentModal = ({ content, onClose }) => {
 
   // Listen for dark mode changes from other components
   useStorageListener('darkMode', setIsDarkMode)
+
+  // Apply dark mode class to document element
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
 
   // Fetch profile data when content changes
   useEffect(() => {

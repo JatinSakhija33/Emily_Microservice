@@ -30,7 +30,7 @@ const useStorageListener = (key, callback) => {
     // Also listen for custom events for same-tab updates
     const handleCustomChange = (e) => {
       if (e.detail.key === key) {
-        callback(e.detail.value === 'true')
+        callback(e.detail.newValue === 'true')
       }
     }
 
@@ -89,6 +89,16 @@ function CreatedContentDashboard() {
 
   // Listen for dark mode changes from other components (like SideNavbar)
   useStorageListener('darkMode', setIsDarkMode)
+
+  // Apply dark mode class to document element
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
+
   const [loading, setLoading] = useState(true)
   const [content, setContent] = useState([])
   const [filteredContent, setFilteredContent] = useState([])

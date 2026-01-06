@@ -36,7 +36,7 @@ const useStorageListener = (key, callback) => {
     // Also listen for custom events for same-tab updates
     const handleCustomChange = (e) => {
       if (e.detail.key === key) {
-        callback(e.detail.value === 'true')
+        callback(e.detail.newValue === 'true')
       }
     }
 
@@ -125,6 +125,15 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const inputRef = useRef(null)
   const lastExternalConversationsRef = useRef(null)
   const hasScrolledToBottomRef = useRef(false)
+
+  // Apply dark mode class to document element
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView()

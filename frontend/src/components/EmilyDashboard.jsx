@@ -26,7 +26,7 @@ const useStorageListener = (key, callback) => {
     // Also listen for custom events for same-tab updates
     const handleCustomChange = (e) => {
       if (e.detail.key === key) {
-        callback(e.detail.value === 'true')
+        callback(e.detail.newValue === 'true')
       }
     }
 

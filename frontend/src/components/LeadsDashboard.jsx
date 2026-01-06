@@ -30,7 +30,7 @@ const useDarkMode = () => {
   useEffect(() => {
     const handleStorageChange = (event) => {
       if (event.detail && event.detail.key === 'darkMode') {
-        const newValue = event.detail.value === 'true'
+        const newValue = event.detail.newValue === 'true'
         setIsDarkMode(newValue)
       }
     }

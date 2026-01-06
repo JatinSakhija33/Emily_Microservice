@@ -55,8 +55,21 @@ const useStorageListener = (key, callback) => {
         callback(e.newValue === 'true')
       }
     }
+
+    // Also listen for custom events for same-tab updates
+    const handleCustomChange = (e) => {
+      if (e.detail.key === key) {
+        callback(e.detail.newValue === 'true')
+      }
+    }
+
     window.addEventListener('storage', handleStorageChange)
-    return () => window.removeEventListener('storage', handleStorageChange)
+    window.addEventListener('localStorageChange', handleCustomChange)
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('localStorageChange', handleCustomChange)
+    }
   }, [key, callback])
 }
 
@@ -83,6 +96,15 @@ const SocialMediaDashboard = () => {
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference)
   const [profile, setProfile] = useState(null)
   const [expandedCaptions, setExpandedCaptions] = useState(new Set())
+
+  // Apply dark mode class to document element
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
 
   useEffect(() => {
     setDataLoaded(false)

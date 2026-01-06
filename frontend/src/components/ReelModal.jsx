@@ -21,7 +21,7 @@ const useStorageListener = (key, callback) => {
 
     const handleCustomChange = (e) => {
       if (e.detail.key === key) {
-        callback(e.detail.value === 'true')
+        callback(e.detail.newValue === 'true')
       }
     }
 
