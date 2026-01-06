@@ -3,7 +3,7 @@ import {
   Sparkles, Bell, CheckCircle, Minus, Loader2, RefreshCw, Clock
 } from 'lucide-react'
 
-const TaskNotification = () => {
+const TaskNotification = ({ isDarkMode = false }) => {
   const [isVisible, setIsVisible] = useState(true)
   const [isCollapsed, setIsCollapsed] = useState(true)
   const [tasks, setTasks] = useState([])
@@ -187,14 +187,14 @@ const TaskNotification = () => {
           <div className="max-h-96 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
-                <span className="ml-2 text-gray-500">Loading tasks...</span>
+                <Loader2 className={`w-6 h-6 animate-spin ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                <span className={`ml-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Loading tasks...</span>
               </div>
             ) : tasks.length === 0 ? (
               <div className="text-center py-8">
-                <Clock className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 mb-2">No automated tasks configured</p>
-                <p className="text-xs text-gray-400">Tasks will appear here when configured</p>
+                <Clock className={`w-12 h-12 mx-auto mb-3 ${isDarkMode ? 'text-gray-600' : 'text-gray-300'}`} />
+                <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mb-2`}>No automated tasks configured</p>
+                <p className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Tasks will appear here when configured</p>
               </div>
             ) : (
               <div className="p-4 space-y-3">
@@ -207,26 +207,26 @@ const TaskNotification = () => {
                           <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
                             <Icon className="w-4 h-4 text-purple-600" />
                           </div>
-                          <h4 className="font-medium text-gray-900 text-sm">{task.name}</h4>
+                          <h4 className={`font-medium text-sm ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{task.name}</h4>
                         </div>
                         <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
                       </div>
                       
-                      <p className="text-xs text-gray-600 mb-2">{task.description}</p>
+                      <p className={`text-xs mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{task.description}</p>
                       
                       <div className="space-y-1">
                         {task.executionTime ? (
                           <>
-                            <div className="flex items-center justify-between text-xs text-gray-500">
+                            <div className={`flex items-center justify-between text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                               <span>Executed:</span>
                               <span className="font-medium">{formatExecutionTime(task.executionTime)}</span>
                             </div>
-                            <div className="flex items-center justify-between text-xs text-gray-500">
+                            <div className={`flex items-center justify-between text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                               <span>Duration:</span>
                               <span className="font-medium">{task.duration || 'N/A'}</span>
                             </div>
                             {task.nextRun && (
-                              <div className="flex items-center justify-between text-xs text-gray-500">
+                              <div className={`flex items-center justify-between text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                                 <span>Next Run:</span>
                                 <span className="font-medium text-blue-600">{task.nextRun}</span>
                               </div>

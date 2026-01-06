@@ -5,20 +5,6 @@ import { supabase } from '../lib/supabase'
 import { adminAPI } from '../services/admin'
 import SettingsMenu from './SettingsMenu'
 import UsageStats from './UsageStats'
-// Custom Discussions Icon Component
-const DiscussionsIcon = ({ className, isDarkMode }) => (
-  <img
-    src="/discussions.svg"
-    alt="Discussions"
-    className={className}
-    style={{
-      width: '24px',
-      height: '24px',
-      objectFit: 'contain',
-      filter: isDarkMode ? 'brightness(0) invert(1)' : 'none'
-    }}
-  />
-)
 import {
   Home,
   FileText,
@@ -162,45 +148,60 @@ const SideNavbar = () => {
     }
   }, [user])
 
-  const navigationItems = [
-    {
-      name: 'Discussions',
-      href: '/dashboard',
-      icon: DiscussionsIcon
-    },
-    {
-      name: 'Content',
-      href: '/created-content',
-      icon: FileText
-    },
-    // Temporarily hidden - Writings dashboard
-    // {
-    //   name: 'Writings',
-    //   href: '/blogs',
-    //   icon: Pen
-    // },
-    {
-      name: 'Happenings',
-      href: '/social',
-      icon: TrendingUp
-    },
-    // Temporarily hidden - Analytics dashboard
-    // {
-    //   name: 'Analytics',
-    //   href: '/analytics',
-    //   icon: BarChart3
-    // },
-    // {
-    //   name: 'Ads',
-    //   href: '/ads',
-    //   icon: Megaphone
-    // },
-    {
-      name: 'Leads',
-      href: '/leads',
-      icon: UserPlus
-    }
-  ]
+// Custom Discussions Icon Component
+const DiscussionsIcon = ({ className, isDarkMode }) => (
+  <img
+    src="/discussions.svg"
+    alt="Discussions"
+    className={className}
+    style={{
+      width: '24px',
+      height: '24px',
+      objectFit: 'contain',
+      filter: isDarkMode ? 'brightness(0) invert(1)' : 'none'
+    }}
+  />
+)
+
+const navigationItems = [
+  {
+    name: 'Discussions',
+    href: '/dashboard',
+    icon: DiscussionsIcon
+  },
+  {
+    name: 'Content',
+    href: '/created-content',
+    icon: FileText
+  },
+  // Temporarily hidden - Writings dashboard
+  // {
+  //   name: 'Writings',
+  //   href: '/blogs',
+  //   icon: Pen
+  // },
+  {
+    name: 'Happenings',
+    href: '/social',
+    icon: TrendingUp
+  },
+  // Temporarily hidden - Analytics dashboard
+  // {
+  //   name: 'Analytics',
+  //   href: '/analytics',
+  //   icon: BarChart3
+  // },
+  // {
+  //   name: 'Ads',
+  //   href: '/ads',
+  //   icon: Megaphone
+  // },
+  {
+    name: 'Leads',
+    href: '/leads',
+    icon: UserPlus
+  }
+]
 
   const handleLogout = () => {
     // Clear profile cache on logout

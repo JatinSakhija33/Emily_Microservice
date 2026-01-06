@@ -544,11 +544,14 @@ const ATSNContentModal = ({
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm z-30"
-      onClick={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose()
+        }
+      }}
     >
       <div
         className="fixed inset-0 flex items-center justify-center p-4"
-        onClick={(e) => e.stopPropagation()}
       >
         <div className={`relative max-w-6xl w-full rounded-2xl shadow-2xl overflow-hidden ${
           isDarkMode ? 'bg-gray-800' : 'bg-white'

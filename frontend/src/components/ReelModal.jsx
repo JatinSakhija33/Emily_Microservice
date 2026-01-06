@@ -187,10 +187,19 @@ const ReelModal = ({ content, onClose }) => {
   if (loading) return null // Could show a loading spinner here
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-30 backdrop-blur-sm">
-      <div className={`relative w-full max-w-6xl max-h-[90vh] rounded-xl shadow-2xl overflow-hidden ${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
-      }`}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-30 backdrop-blur-sm"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose()
+        }
+      }}
+    >
+      <div
+        className={`relative w-full max-w-6xl max-h-[90vh] rounded-xl shadow-2xl overflow-hidden ${
+          isDarkMode ? 'bg-gray-900' : 'bg-white'
+        }`}
+      >
 
         {/* Header */}
         <div className={`flex items-center justify-between p-6 border-b ${

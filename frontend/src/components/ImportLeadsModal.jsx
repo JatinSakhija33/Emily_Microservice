@@ -89,8 +89,18 @@ Bob Johnson,,+1234567892,phone_call,new,2024-12-31T14:00:00`
   if (!isOpen) return null
 
   return (
-    <div className="fixed bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto md:left-48 xl:left-64" style={{ right: '0', top: '0', bottom: '0' }}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+    <div
+      className="fixed bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto md:left-48 xl:left-64"
+      style={{ right: '0', top: '0', bottom: '0' }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose()
+        }
+      }}
+    >
+      <div
+        className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col"
+      >
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-xl">
           <div className="flex items-center justify-between">

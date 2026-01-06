@@ -985,10 +985,19 @@ const WebsiteAnalysisDashboard = () => {
 
       {/* Analysis Detail Modal */}
       {selectedAnalysis && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div className={`rounded-lg shadow-xl max-w-4xl w-full mx-2 sm:mx-4 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar ${
-            isDarkMode ? 'bg-gray-800 dark-mode' : 'bg-white light-mode'
-          }`}>
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedAnalysis(null)
+            }
+          }}
+        >
+          <div
+            className={`rounded-lg shadow-xl max-w-4xl w-full mx-2 sm:mx-4 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar ${
+              isDarkMode ? 'bg-gray-800 dark-mode' : 'bg-white light-mode'
+            }`}
+          >
             <div className={`p-3 sm:p-4 md:p-6 border-b ${
               isDarkMode ? 'border-gray-700' : 'border-gray-200'
             }`}>
@@ -1074,10 +1083,19 @@ const WebsiteAnalysisDashboard = () => {
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div className={`rounded-lg shadow-xl max-w-md w-full mx-2 sm:mx-4 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar ${
-            isDarkMode ? 'bg-gray-800 dark-mode' : 'bg-white light-mode'
-          }`}>
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowSettings(false)
+            }
+          }}
+        >
+          <div
+            className={`rounded-lg shadow-xl max-w-md w-full mx-2 sm:mx-4 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar ${
+              isDarkMode ? 'bg-gray-800 dark-mode' : 'bg-white light-mode'
+            }`}
+          >
             <div className={`p-3 sm:p-4 md:p-6 border-b ${
               isDarkMode ? 'border-gray-700' : 'border-gray-200'
             }`}>

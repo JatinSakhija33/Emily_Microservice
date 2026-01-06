@@ -107,7 +107,7 @@ const UsageStats = ({ userPlan }) => {
 
   return (
     <div className={`space-y-3 ${loading ? 'opacity-75' : ''}`}>
-      <h3 className="text-xs font-normal text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+      <h3 className="text-xs font-normal text-gray-600 dark:text-gray-400 uppercase tracking-wide">
         {(userPlan || cachedPlan) ? `${(userPlan || cachedPlan).replace('_', ' ').toUpperCase()} - ` : ''}Monthly Usage
         {loading && <span className="ml-1 text-xs">⟳</span>}
       </h3>
@@ -117,7 +117,7 @@ const UsageStats = ({ userPlan }) => {
         <div>
           <div className="flex justify-between text-xs mb-1">
             <span className="text-gray-600 dark:text-gray-400">Tasks Completed</span>
-            <span className="text-gray-900 dark:text-gray-100 font-medium">
+            <span className="text-gray-500 dark:text-gray-100 font-medium">
               {usage.tasks_used}/{usage.tasks_limit === -1 ? '∞' : formatLimit(usage.tasks_limit)}
             </span>
           </div>
@@ -140,7 +140,7 @@ const UsageStats = ({ userPlan }) => {
         <div>
           <div className="flex justify-between text-xs mb-1">
             <span className="text-gray-600 dark:text-gray-400">Posts Generated</span>
-            <span className="text-gray-900 dark:text-gray-100 font-medium">
+            <span className="text-gray-500 dark:text-gray-100 font-medium">
               {usage.images_used}/{usage.images_limit === -1 ? '∞' : formatLimit(usage.images_limit)}
             </span>
           </div>

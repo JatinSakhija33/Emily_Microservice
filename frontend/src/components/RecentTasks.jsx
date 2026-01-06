@@ -11,7 +11,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 
-const RecentTasks = () => {
+const RecentTasks = ({ isDarkMode = false }) => {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(false)
 
@@ -189,11 +189,11 @@ const RecentTasks = () => {
   return (
     <div className="bg-white rounded-lg shadow-sm border p-6 mr-0 w-full">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">Recent Task Executions</h3>
+        <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Recent Task Executions</h3>
         <button
           onClick={handleRefresh}
           disabled={loading}
-          className="p-2 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+          className={`p-2 transition-colors disabled:opacity-50 ${isDarkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
@@ -201,12 +201,12 @@ const RecentTasks = () => {
 
       {loading ? (
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
-          <span className="ml-2 text-gray-500">Loading tasks...</span>
+          <Loader2 className={`w-6 h-6 animate-spin ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+          <span className={`ml-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Loading tasks...</span>
         </div>
       ) : tasks.length === 0 ? (
         <div className="text-center py-8">
-          <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <Calendar className={`w-12 h-12 mx-auto mb-3 ${isDarkMode ? 'text-gray-600' : 'text-gray-300'}`} />
           <p className="text-gray-500 mb-2">No automated tasks configured</p>
           <p className="text-xs text-gray-400">Tasks will appear here when configured</p>
         </div>
@@ -224,7 +224,7 @@ const RecentTasks = () => {
                   <CheckCircle className="w-5 h-5 text-green-500" />
                 </div>
                 
-                <p className="text-sm text-gray-600 mb-3">{task.description}</p>
+                <p className={`text-sm mb-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{task.description}</p>
                 
                 <div className="space-y-2">
                   {task.executionTime ? (

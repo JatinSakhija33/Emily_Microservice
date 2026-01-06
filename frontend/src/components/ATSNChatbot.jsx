@@ -2688,8 +2688,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       {/* Schedule Modal */}
       {showScheduleModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowScheduleModal(false)
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-md w-full mx-4"
+          >
             <h3 className="text-xl font-semibold mb-4">Schedule Content</h3>
             <div className="space-y-4">
               <div>
@@ -3978,7 +3987,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                   </div>
                 ) : (
                   <div className="relative">
-                    <p className="text-base whitespace-pre-wrap pr-16">{message.text}</p>
+                    <p className="text-base whitespace-pre-wrap pr-16 text-left">{message.text}</p>
                     <div className={`absolute bottom-0 right-0 text-xs ${
                       message.sender === 'user' ? 'text-white' : 'text-gray-400'
                     }`}>
@@ -4005,7 +4014,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
               {/* Thinking text below user messages when loading */}
               {isLoading && message.sender === 'user' && index === messages.length - 1 && (
                 <div className="mt-2 ml-12">
-                  <span className="text-sm text-white italic animate-pulse">
+                  <span className={`text-sm italic animate-pulse ${isDarkMode ? 'text-white' : 'text-gray-600'}`}>
                     {getThinkingMessage()}
                   </span>
                 </div>
@@ -4098,8 +4107,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       {/* Date Picker Modal */}
       {showDatePicker && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleDatePickerCancel()
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl"
+          >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Date Range</h3>
 
             <div className="space-y-4">
@@ -4153,8 +4171,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       {/* Single Date Picker Modal for Lead Follow-up */}
       {showSingleDatePicker && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleSingleDatePickerCancel()
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl"
+          >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Follow-up Date</h3>
 
             <div className="space-y-4">
@@ -4194,8 +4221,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       {/* Media Upload Modal */}
       {showMediaUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowMediaUploadModal(false)
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto"
+          >
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 {selectedFilesForUpload.length > 0 ? 'Confirm Upload' : 'Upload Media for Your Post'}
@@ -4358,8 +4394,18 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       {/* Edit Lead Modal */}
       {showEditLeadModal && editLeadData && (
-        <div className={`fixed inset-0 ${isDarkMode ? 'bg-black bg-opacity-75' : 'bg-black bg-opacity-50'} flex items-center justify-center z-50`}>
-          <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto`}>
+        <div
+          className={`fixed inset-0 ${isDarkMode ? 'bg-black bg-opacity-75' : 'bg-black bg-opacity-50'} flex items-center justify-center z-50`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowEditLeadModal(false)
+              setEditLeadData(null)
+            }
+          }}
+        >
+          <div
+            className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-xl p-6 max-w-lg w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto`}
+          >
             <div className="flex justify-between items-center mb-6">
               <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Edit Lead</h3>
               <button

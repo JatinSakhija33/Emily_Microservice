@@ -74,8 +74,17 @@ const DisconnectConfirmationModal = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-3 md:p-4">
-      <div className="bg-white rounded-lg sm:rounded-xl md:rounded-2xl lg:rounded-3xl shadow-2xl max-w-md w-full overflow-hidden max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-1.5rem)] md:max-h-[calc(100vh-2rem)] flex flex-col">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-3 md:p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose()
+        }
+      }}
+    >
+      <div
+        className="bg-white rounded-lg sm:rounded-xl md:rounded-2xl lg:rounded-3xl shadow-2xl max-w-md w-full overflow-hidden max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-1.5rem)] md:max-h-[calc(100vh-2rem)] flex flex-col"
+      >
         {/* Header with platform branding */}
         <div className={`${currentPlatform.color} px-3 sm:px-4 md:px-5 lg:px-6 py-3 sm:py-4 md:py-5 lg:py-6 ${currentPlatform.color === 'bg-white' ? 'text-gray-900' : 'text-white'} relative flex-shrink-0`}>
           <div className="flex items-center justify-between gap-2 sm:gap-3 md:gap-4">

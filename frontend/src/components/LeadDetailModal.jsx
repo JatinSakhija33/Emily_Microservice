@@ -762,8 +762,18 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
   const statusConfig = getStatusConfig(selectedStatus || lead.status)
 
   return (
-    <div className={`fixed ${isDarkMode ? 'bg-gray-900 bg-opacity-75' : 'bg-black bg-opacity-50'} flex items-center justify-center z-50 p-4 overflow-y-auto md:left-48 xl:left-64`} style={{ right: '0', top: '0', bottom: '0' }}>
-      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-2xl max-w-6xl w-full h-[80vh] flex flex-col overflow-hidden p-4`}>
+    <div
+      className={`fixed ${isDarkMode ? 'bg-gray-900 bg-opacity-75' : 'bg-black bg-opacity-50'} flex items-center justify-center z-50 p-4 overflow-y-auto md:left-48 xl:left-64`}
+      style={{ right: '0', top: '0', bottom: '0' }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose()
+        }
+      }}
+    >
+      <div
+        className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-2xl max-w-6xl w-full h-[80vh] flex flex-col overflow-hidden p-4`}
+      >
         {/* Two Column Layout */}
         <div className="flex flex-1 overflow-hidden">
           {/* Left Column - Lead Details */}
@@ -905,7 +915,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                     <button
                       onClick={clearFollowUp}
                       disabled={updatingFollowUp}
-                    className={`w-full px-2 py-1.5 bg-white hover:opacity-80 border ${statusConfig.borderColor} rounded-lg text-gray-700 text-xs font-medium transition-colors disabled:opacity-50`}
+                    className={`w-full px-2 py-1.5 ${isDarkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-white hover:opacity-80 text-gray-700'} border ${statusConfig.borderColor} text-xs font-medium transition-colors disabled:opacity-50`}
                       title="Clear follow-up"
                     >
                     Clear Follow-up
@@ -936,14 +946,14 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                   <button
                     onClick={handleStatusUpdate}
                     disabled={updatingStatus}
-                    className={`flex-1 px-4 py-2 ${statusConfig.color.split(' ')[0]} hover:opacity-90 border ${statusConfig.borderColor} rounded-lg text-white font-medium transition-colors disabled:opacity-50`}
+                    className={`flex-1 px-4 py-2 ${statusConfig.color.split(' ')[0]} hover:opacity-90 border ${statusConfig.borderColor} rounded-lg ${statusConfig.color.split(' ')[1]} font-medium transition-colors disabled:opacity-50`}
                   >
                     {updatingStatus ? 'Updating...' : 'Save Status Change'}
                   </button>
                   <button
                     onClick={handleCancelStatusUpdate}
                     disabled={updatingStatus}
-                    className={`px-4 py-2 bg-white hover:opacity-80 border ${statusConfig.borderColor} rounded-lg text-gray-700 font-medium transition-colors disabled:opacity-50`}
+                    className={`px-4 py-2 ${isDarkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border-gray-600' : 'bg-white hover:opacity-80 border-gray-300 text-gray-700'} rounded-lg font-medium transition-colors disabled:opacity-50`}
                   >
                     Cancel
                   </button>
@@ -1006,7 +1016,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-colors ${
                   activeTab === tab.id
-                    ? 'border-purple-600 text-white'
+                    ? `border-purple-600 ${isDarkMode ? 'text-white' : 'text-purple-700'}`
                     : `border-transparent ${isDarkMode ? 'text-gray-400 hover:text-purple-400' : 'text-gray-600 hover:text-purple-600'}`
                 }`}
               >
@@ -1042,8 +1052,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                 </div>
               ) : timeline.length === 0 ? (
                 <div className="text-center py-12">
-                  <Clock className={`w-12 h-12 ${isDarkMode ? 'text-gray-600' : 'text-gray-300'} mx-auto mb-3`} />
-                  <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>No timeline events yet</p>
+                  <Clock className={`w-12 h-12 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'} mx-auto mb-3`} />
+                  <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No timeline events yet</p>
                 </div>
               ) : (
                 <div className="relative">
@@ -1100,7 +1110,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                               )}
                               {event.timestamp && (
                                 <div className="mt-2">
-                                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                                     {formatTimeAgo(event.timestamp)}
                                   </div>
                                 </div>
@@ -1131,9 +1141,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                         <div className="flex-1 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-4 border border-purple-200">
                           <div className="flex items-center justify-between mb-1">
                             <h4 className="font-normal text-gray-900">{event.title}</h4>
-                            <span className="text-xs text-gray-500">{formatTimeAgo(event.timestamp)}</span>
+                            <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(event.timestamp)}</span>
                           </div>
-                          <p className="text-sm text-gray-600">
+                          <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                             {typeof event.description === 'object' ? (
                               <>
                                 {event.description.text}
@@ -1250,7 +1260,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                           <span className="text-sm font-medium text-gray-900">
                             {conv.sender === 'agent' ? 'You' : lead.name || 'Lead'}
                           </span>
-                          <span className="text-xs text-gray-500">{formatTimeAgo(conv.created_at)}</span>
+                          <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(conv.created_at)}</span>
                         </div>
                         <div 
                           className="text-sm text-gray-700 email-content prose prose-sm max-w-none"
@@ -1298,7 +1308,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                           <span className="text-sm font-medium text-gray-900">
                             {conv.sender === 'agent' ? 'You' : lead.name || 'Lead'}
                           </span>
-                          <span className="text-xs text-gray-500">{formatTimeAgo(conv.created_at)}</span>
+                          <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{formatTimeAgo(conv.created_at)}</span>
                         </div>
                         <p className="text-sm text-gray-700">{conv.content}</p>
                         {conv.status && (
@@ -1321,8 +1331,8 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
 
               {conversations.length === 0 && !loadingConversations && (
                 <div className="text-center py-12">
-                  <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500">No conversations yet</p>
+                  <MessageCircle className={`w-12 h-12 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'} mx-auto mb-3`} />
+                  <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>No conversations yet</p>
                 </div>
               )}
               <style>{`
@@ -1524,9 +1534,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <p className="text-sm font-medium text-gray-900 truncate">{email.subject}</p>
-                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{email.body.replace(/<[^>]*>/g, '').substring(0, 100)}...</p>
+                            <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-1 line-clamp-2`}>{email.body.replace(/<[^>]*>/g, '').substring(0, 100)}...</p>
                           </div>
-                          <span className="text-xs text-gray-400 ml-2">{new Date(email.date).toLocaleDateString()}</span>
+                          <span className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-700'} ml-2`}>{new Date(email.date).toLocaleDateString()}</span>
                         </div>
                       </button>
                     ))}
@@ -1708,9 +1718,9 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
               {/* No Email Generated State */}
               {!generatedEmail && (
                 <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
-                  <MailIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 mb-2">No email generated yet</p>
-                  <p className="text-sm text-gray-400">Select a template and click "Generate Email" to create a personalized email for this lead</p>
+                  <MailIcon className={`w-16 h-16 ${isDarkMode ? 'text-gray-600' : 'text-gray-400'} mx-auto mb-4`} />
+                  <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mb-2`}>No email generated yet</p>
+                  <p className={`text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-700'}`}>Select a template and click "Generate Email" to create a personalized email for this lead</p>
                 </div>
               )}
             </div>
