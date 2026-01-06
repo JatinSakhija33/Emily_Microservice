@@ -278,22 +278,40 @@ function CreatedContentDashboard() {
   }
 
   const handleEdit = (contentItem) => {
-    const { mediaUrl, isVideo } = getMediaInfo(contentItem)
+    // Check if it's video content and open appropriate modal
+    const isVideoContent = contentItem.content_type === 'short_video or reel' ||
+                          contentItem.content_type === 'reel' ||
+                          contentItem.content_type?.toLowerCase().includes('reel') ||
+                          contentItem.content_type?.toLowerCase().includes('video') ||
+                          contentItem.raw_data?.content_type === 'short_video or reel' ||
+                          contentItem.raw_data?.content_type === 'reel' ||
+                          contentItem.raw_data?.content_type?.toLowerCase().includes('reel') ||
+                          contentItem.raw_data?.content_type?.toLowerCase().includes('video')
 
-    if (!mediaUrl) {
-      showError('This content does not have an image to edit.')
-      return
+    if (isVideoContent) {
+      // Open ReelModal for video content
+      setSelectedContent(contentItem)
+      setIsReelModalOpen(true)
+    } else {
+      // Check for image editing
+      const { mediaUrl, isVideo } = getMediaInfo(contentItem)
+
+      if (!mediaUrl) {
+        showError('This content does not have an image to edit.')
+        return
+      }
+
+      if (isVideo) {
+        showError('Image editing is only available for image posts.')
+        return
+      }
+
+      // Open ATSNContentModal for image editing
+      setSelectedContent(contentItem)
+      setInitialImageEditorUrl(mediaUrl)
+      setAutoOpenImageEditor(true)
+      setIsContentModalOpen(true)
     }
-
-    if (isVideo) {
-      showError('Image editing is only available for image posts.')
-      return
-    }
-
-    setSelectedContent(contentItem)
-    setInitialImageEditorUrl(mediaUrl)
-    setAutoOpenImageEditor(true)
-    setIsContentModalOpen(true)
   }
 
   const handleCopy = (contentItem) => {

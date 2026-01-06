@@ -1178,10 +1178,62 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       return
     }
 
-    // Open image editor modal - this would need to be implemented
-    // For now, just show a placeholder
-    console.log('Edit content:', selectedContent[0])
-    showError('Image editor modal coming soon!')
+    // Find the actual content item from messages
+    let selectedContentItem = null
+    for (const message of messages) {
+      if (message.content_items) {
+        selectedContentItem = message.content_items.find(item => item.content_id === selectedContent[0])
+        if (selectedContentItem) break
+      }
+    }
+
+    if (!selectedContentItem) {
+      showError('Selected content not found')
+      return
+    }
+
+    // Process the content item the same way as for ATSNContentCard
+    const processedContent = {
+      id: selectedContentItem.content_id,
+      title: selectedContentItem.title_display || selectedContentItem.title,
+      content: selectedContentItem.content_text || selectedContentItem.content_preview,
+      hashtags: selectedContentItem.hashtags_display ?
+        selectedContentItem.hashtags_display.split(' ').filter(tag => tag.startsWith('#')).map(tag => tag.substring(1)) :
+        (selectedContentItem.hashtags ?
+          (Array.isArray(selectedContentItem.hashtags) ? selectedContentItem.hashtags : []) :
+          (selectedContentItem.raw_data?.hashtags ?
+            (Array.isArray(selectedContentItem.raw_data.hashtags) ? selectedContentItem.raw_data.hashtags : []) :
+            [])),
+      media_url: selectedContentItem.media_url,
+      images: selectedContentItem.images || [],
+      metadata: selectedContentItem.metadata || {},
+      post_type: selectedContentItem.raw_data?.post_type,
+      content_type: selectedContentItem.content_type,
+      selected_content_type: selectedContentItem.raw_data?.selected_content_type,
+      carousel_images: selectedContentItem.raw_data?.carousel_images || selectedContentItem.raw_data?.images,
+      // Add additional fields for different content types
+      email_subject: selectedContentItem.email_subject,
+      email_body: selectedContentItem.email_body,
+      short_video_script: selectedContentItem.short_video_script,
+      long_video_script: selectedContentItem.long_video_script,
+      message: selectedContentItem.message,
+      platform: selectedContentItem.platform
+    }
+
+    // Check if it's a reel/video and open appropriate modal
+    setSelectedContentForModal(processedContent)
+    if (processedContent.content_type === 'short_video or reel' ||
+        processedContent.content_type === 'reel' ||
+        processedContent.content_type?.toLowerCase().includes('reel') ||
+        processedContent.content_type?.toLowerCase().includes('video') ||
+        selectedContentItem.raw_data?.content_type === 'short_video or reel' ||
+        selectedContentItem.raw_data?.content_type === 'reel' ||
+        selectedContentItem.raw_data?.content_type?.toLowerCase().includes('reel') ||
+        selectedContentItem.raw_data?.content_type?.toLowerCase().includes('video')) {
+      setShowReelModal(true)
+    } else {
+      setShowContentModal(true)
+    }
 
     // Clear selection after action
     setSelectedContent([])
@@ -3134,6 +3186,50 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                         contentType={contentItem.content_type}
                                         intent={message.intent}
                                         onClick={() => handleContentClick(contentItem)}
+                                        onEdit={() => {
+                                          // Process the content item the same way as for modal opening
+                                          const processedContent = {
+                                            id: contentItem.content_id,
+                                            title: contentItem.title_display || contentItem.title,
+                                            content: contentItem.content_text || contentItem.content_preview,
+                                            hashtags: contentItem.hashtags_display ?
+                                              contentItem.hashtags_display.split(' ').filter(tag => tag.startsWith('#')).map(tag => tag.substring(1)) :
+                                              (contentItem.hashtags ?
+                                                (Array.isArray(contentItem.hashtags) ? contentItem.hashtags : []) :
+                                                (contentItem.raw_data?.hashtags ?
+                                                  (Array.isArray(contentItem.raw_data.hashtags) ? contentItem.raw_data.hashtags : []) :
+                                                  [])),
+                                            media_url: contentItem.media_url,
+                                            images: contentItem.images || [],
+                                            metadata: contentItem.metadata || {},
+                                            post_type: contentItem.raw_data?.post_type,
+                                            content_type: contentItem.content_type,
+                                            selected_content_type: contentItem.raw_data?.selected_content_type,
+                                            carousel_images: contentItem.raw_data?.carousel_images || contentItem.raw_data?.images,
+                                            // Add additional fields for different content types
+                                            email_subject: contentItem.email_subject,
+                                            email_body: contentItem.email_body,
+                                            short_video_script: contentItem.short_video_script,
+                                            long_video_script: contentItem.long_video_script,
+                                            message: contentItem.message,
+                                            platform: contentItem.platform
+                                          };
+
+                                          // Check if it's a reel/video and open appropriate modal
+                                          setSelectedContentForModal(processedContent);
+                                          if (processedContent.content_type === 'short_video or reel' ||
+                                              processedContent.content_type === 'reel' ||
+                                              processedContent.content_type?.toLowerCase().includes('reel') ||
+                                              processedContent.content_type?.toLowerCase().includes('video') ||
+                                              contentItem.raw_data?.content_type === 'short_video or reel' ||
+                                              contentItem.raw_data?.content_type === 'reel' ||
+                                              contentItem.raw_data?.content_type?.toLowerCase().includes('reel') ||
+                                              contentItem.raw_data?.content_type?.toLowerCase().includes('video')) {
+                                            setShowReelModal(true);
+                                          } else {
+                                            setShowContentModal(true);
+                                          }
+                                        }}
                                         isDarkMode={isDarkMode}
                                       />
                                     ) : (
@@ -3189,8 +3285,48 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                           setShowContentModal(true);
                                         }}
                                         onEdit={() => {
-                                          // Handle edit action - could navigate to edit page or open modal
-                                          console.log('Edit content:', contentItem.content_id);
+                                          // Process the content item the same way as for modal opening
+                                          const processedContent = {
+                                            id: contentItem.content_id,
+                                            title: contentItem.title_display || contentItem.title,
+                                            content: contentItem.content_text || contentItem.content_preview,
+                                            hashtags: contentItem.hashtags_display ?
+                                              contentItem.hashtags_display.split(' ').filter(tag => tag.startsWith('#')).map(tag => tag.substring(1)) :
+                                              (contentItem.hashtags ?
+                                                (Array.isArray(contentItem.hashtags) ? contentItem.hashtags : []) :
+                                                (contentItem.raw_data?.hashtags ?
+                                                  (Array.isArray(contentItem.raw_data.hashtags) ? contentItem.raw_data.hashtags : []) :
+                                                  [])),
+                                            media_url: contentItem.media_url,
+                                            images: contentItem.images || [],
+                                            metadata: contentItem.metadata || {},
+                                            post_type: contentItem.raw_data?.post_type,
+                                            content_type: contentItem.content_type,
+                                            selected_content_type: contentItem.raw_data?.selected_content_type,
+                                            carousel_images: contentItem.raw_data?.carousel_images || contentItem.raw_data?.images,
+                                            // Add additional fields for different content types
+                                            email_subject: contentItem.email_subject,
+                                            email_body: contentItem.email_body,
+                                            short_video_script: contentItem.short_video_script,
+                                            long_video_script: contentItem.long_video_script,
+                                            message: contentItem.message,
+                                            platform: contentItem.platform
+                                          };
+
+                                          // Check if it's a reel/video and open appropriate modal
+                                          setSelectedContentForModal(processedContent);
+                                          if (processedContent.content_type === 'short_video or reel' ||
+                                              processedContent.content_type === 'reel' ||
+                                              processedContent.content_type?.toLowerCase().includes('reel') ||
+                                              processedContent.content_type?.toLowerCase().includes('video') ||
+                                              contentItem.raw_data?.content_type === 'short_video or reel' ||
+                                              contentItem.raw_data?.content_type === 'reel' ||
+                                              contentItem.raw_data?.content_type?.toLowerCase().includes('reel') ||
+                                              contentItem.raw_data?.content_type?.toLowerCase().includes('video')) {
+                                            setShowReelModal(true);
+                                          } else {
+                                            setShowContentModal(true);
+                                          }
                                         }}
                                       />
                                     )}

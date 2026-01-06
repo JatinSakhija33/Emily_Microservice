@@ -1,7 +1,7 @@
 import React from 'react'
-import { Instagram, Facebook, MessageCircle, Hash, Heart, Share, MessageSquare } from 'lucide-react'
+import { Instagram, Facebook, MessageCircle, Hash, Heart, Share, MessageSquare, Edit } from 'lucide-react'
 
-const ATSNContentCard = ({ content, platform, contentType, intent, onClick, isDarkMode = false }) => {
+const ATSNContentCard = ({ content, platform, contentType, intent, onClick, onEdit, isDarkMode = false }) => {
   // Platform icons
   const getPlatformIcon = (platformName) => {
     switch (platformName?.toLowerCase()) {
@@ -53,6 +53,20 @@ const ATSNContentCard = ({ content, platform, contentType, intent, onClick, isDa
             {getPlatformDisplayName(platform)} | {contentType?.replace('_', ' ')}
           </span>
         </div>
+        {onEdit && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent triggering the card's onClick
+              onEdit(content);
+            }}
+            className={`p-2 rounded-lg transition-colors ${
+              isDarkMode ? 'text-gray-400 hover:text-blue-400 hover:bg-blue-900/20' : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50'
+            }`}
+            title="Edit content"
+          >
+            <Edit className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Image on top */}
