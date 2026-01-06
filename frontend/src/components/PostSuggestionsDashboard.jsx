@@ -402,31 +402,31 @@ const PostSuggestionsDashboard = () => {
 
                           {/* Generated Image */}
                           {post.generated_image_url && (
-                            <img
+                                <img
                               src={post.generated_image_url}
                               alt="Generated post image"
-                              className="w-full aspect-square object-cover rounded-lg mb-3"
-                              onError={(e) => {
-                                console.log('Post image failed to load:', e.target.src, 'for post:', post.id)
-                                e.target.style.display = 'none'
-                              }}
-                            />
-                          )}
+                                  className="w-full aspect-square object-cover rounded-lg mb-3"
+                                  onError={(e) => {
+                                    console.log('Post image failed to load:', e.target.src, 'for post:', post.id)
+                                    e.target.style.display = 'none'
+                                  }}
+                                />
+                              )}
 
                           {/* Topic */}
                           {post.topic && (
-                            <h3 className={`font-semibold mb-2 line-clamp-2 ${
-                              isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                            }`}>
+                              <h3 className={`font-semibold mb-2 line-clamp-2 ${
+                                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                              }`}>
                               {post.topic}
-                            </h3>
+                              </h3>
                           )}
 
                           {/* Generated Caption */}
                           {post.generated_caption && (
-                            <p className={`text-sm line-clamp-3 mb-3 ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                            }`}>
+                              <p className={`text-sm line-clamp-3 mb-3 ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                              }`}>
                               {post.generated_caption}
                             </p>
                           )}
@@ -506,17 +506,17 @@ const PostSuggestionsDashboard = () => {
                           </span>
                         </div>
 
-                        <h3 className={`font-semibold mb-2 line-clamp-2 ${
-                          isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                        }`}>
-                          {blog.title || 'Untitled Blog'}
-                        </h3>
+                              <h3 className={`font-semibold mb-2 line-clamp-2 ${
+                                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                              }`}>
+                                {blog.title || 'Untitled Blog'}
+                              </h3>
 
-                        <p className={`text-sm line-clamp-3 mb-3 ${
-                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
+                              <p className={`text-sm line-clamp-3 mb-3 ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                              }`}>
                           {blog.content || 'No content available'}
-                        </p>
+                              </p>
 
                         <div className={`flex items-center justify-between text-xs ${
                           isDarkMode ? 'text-gray-400' : 'text-gray-500'
@@ -554,9 +554,9 @@ const PostSuggestionsDashboard = () => {
                       <div
                         key={video.id}
                         className={`flex-shrink-0 w-80 rounded-xl shadow-md border p-4 hover:shadow-lg transition-shadow cursor-pointer ${
-                          isDarkMode
+              isDarkMode
                             ? 'bg-gray-800 border-gray-700 shadow-gray-900/50 hover:shadow-gray-900/70'
-                            : 'bg-white border-gray-200'
+                : 'bg-white border-gray-200'
                         }`}
                       >
                         <div className="flex items-center gap-2 mb-3">
@@ -574,7 +574,7 @@ const PostSuggestionsDashboard = () => {
                         </div>
 
                         <h3 className={`font-semibold mb-2 line-clamp-2 ${
-                          isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
                         }`}>
                           {video.title || 'Untitled Video'}
                         </h3>

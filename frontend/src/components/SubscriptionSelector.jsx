@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Check, ArrowRight, Loader2, Home, HelpCircle, Settings, LogOut, Clock, Gift } from 'lucide-react';
 import { subscriptionAPI } from '../services/subscription';
 import { trialAPI } from '../services/trial';
@@ -18,6 +19,7 @@ const SubscriptionSelector = () => {
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [countdown, setCountdown] = useState(null);
   const { logout } = useAuth();
+  const navigate = useNavigate();
 
   // Function to fetch subscription data
   const fetchSubscriptionData = async () => {
@@ -186,6 +188,46 @@ const SubscriptionSelector = () => {
       console.error('Logout error:', error);
     } finally {
       setIsLoggingOut(false);
+    }
+  };
+
+  const handleFreemiumSelection = async () => {
+    setLoadingPlan('freemium');
+    try {
+      console.log('🚀 Setting up freemium plan...');
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('❌ No authenticated user found');
+        return;
+      }
+
+      // Update profile with freemium plan details
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          subscription_plan: 'freemium',
+          subscription_status: 'active',
+          subscription_start_date: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
+          subscription_end_date: null
+        })
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error('❌ Error updating profile with freemium plan:', updateError);
+        return;
+      }
+
+      console.log('✅ Profile updated with freemium plan');
+
+      // Navigate to onboarding
+      navigate('/onboarding');
+
+    } catch (error) {
+      console.error('❌ Error setting up freemium plan:', error);
+    } finally {
+      setLoadingPlan(null);
     }
   };
 
@@ -730,6 +772,11 @@ const SubscriptionSelector = () => {
                 <button
                   onClick={() => {
                     // Handle freemium plan separately
+                    if (isFreePlan && plan.name === 'freemium') {
+                      handleFreemiumSelection();
+                      return;
+                    }
+                    // Handle free_trial plan
                     if (isFreePlan) {
                       window.location.href = '/signup';
                       return;

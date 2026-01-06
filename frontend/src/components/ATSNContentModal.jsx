@@ -139,8 +139,8 @@ const ATSNContentModal = ({
         hashtags: editHashtagsValue ? editHashtagsValue.split(' ').filter(tag => tag.trim()) : []
       }
 
-      // Handle different content types
-      if (content.content_type === 'short_video or reel' && editContentValue) {
+    // Handle different content types
+    if (content.content_type === 'short_video or reel' && editContentValue) {
         // For short video scripts, you might need to handle this differently
         // depending on your backend schema
         updateData.short_video_script = editContentValue
@@ -161,7 +161,7 @@ const ATSNContentModal = ({
         console.log('Content updated successfully:', result)
 
         // Update local content object with saved data
-        content.title = editTitleValue
+    content.title = editTitleValue
         content.content = editContentValue
         content.hashtags = updateData.hashtags
 
@@ -1215,45 +1215,45 @@ const ATSNContentModal = ({
                     </button>
                   </div>
                   <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleCancelAIEdit}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      isDarkMode
+                        ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
+                        : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                    }`}
+                  >
+                    {showAIResult ? 'Try Again' : 'Cancel'}
+                  </button>
+                  {!showAIResult ? (
                     <button
-                      onClick={handleCancelAIEdit}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                        isDarkMode
-                          ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
-                          : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                      }`}
+                      onClick={handleAISaveEdit}
+                      disabled={aiEditing || !aiEditInstruction.trim() || aiEditInstruction.length > 500}
+                      className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg font-medium hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 disabled:opacity-50 flex items-center space-x-2"
                     >
-                      {showAIResult ? 'Try Again' : 'Cancel'}
+                      {aiEditing ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>AI Editing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          <span>Edit with AI</span>
+                        </>
+                      )}
                     </button>
-                    {!showAIResult ? (
-                      <button
-                        onClick={handleAISaveEdit}
-                        disabled={aiEditing || !aiEditInstruction.trim() || aiEditInstruction.length > 500}
-                        className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg font-medium hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 disabled:opacity-50 flex items-center space-x-2"
-                      >
-                        {aiEditing ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            <span>AI Editing...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4" />
-                            <span>Edit with AI</span>
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleSaveAIResult}
-                        className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg font-medium hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 flex items-center space-x-2"
-                      >
-                        <Check className="w-4 h-4" />
-                        <span>Save Changes</span>
-                      </button>
-                    )}
-                  </div>
+                  ) : (
+                    <button
+                      onClick={handleSaveAIResult}
+                      className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg font-medium hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 flex items-center space-x-2"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Save Changes</span>
+                    </button>
+                  )}
                 </div>
+              </div>
                 {(userImageFile || imageUploadError) && (
                   <div className="mt-2 text-xs text-gray-400">
                     {userImageFile && (
