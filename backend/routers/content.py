@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Query
 from typing import List, Optional
 import os
 import logging
@@ -505,6 +505,8 @@ async def update_created_content(
             update_fields["scheduled_time"] = update_dict["scheduled_time"]
         if "status" in update_dict:
             update_fields["status"] = update_dict["status"]
+        if "images" in update_dict:
+            update_fields["images"] = update_dict["images"]
 
         # Add updated_at timestamp
         update_fields["updated_at"] = datetime.now().isoformat()
@@ -527,6 +529,7 @@ async def update_created_content(
                 "title": updated_content["title"],
                 "content": updated_content["content"],
                 "hashtags": updated_content["hashtags"],
+                "images": updated_content["images"],
                 "updated_at": updated_content["updated_at"]
             }
         }
@@ -1135,4 +1138,45 @@ Return the edited content:"""
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to edit content with AI: {str(e)}"
+        )
+
+@router.get("/post-contents")
+async def get_post_contents(
+    limit: int = Query(50, gt=0, le=200),
+    offset: int = Query(0, ge=0),
+    platform: Optional[str] = None,
+    status: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get post contents from post_contents table"""
+    try:
+        # Build query
+        query = supabase_admin.table("post_contents").select("*")
+
+        # Add filters
+        if platform:
+            query = query.eq("platform", platform)
+        if status:
+            query = query.eq("status", status)
+
+        # Apply pagination and ordering
+        query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
+
+        response = query.execute()
+
+        # Check if response has data (Supabase doesn't use .error attribute like this)
+        if not response.data:
+            logger.warning("No data returned from post_contents query")
+
+        return {
+            "success": True,
+            "data": response.data or [],
+            "count": len(response.data or [])
+        }
+
+    except Exception as e:
+        logger.error(f"Error fetching post contents: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch post contents: {str(e)}"
         )

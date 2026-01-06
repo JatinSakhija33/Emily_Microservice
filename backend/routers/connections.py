@@ -3539,16 +3539,34 @@ async def post_to_facebook(
                 result = response.json()
                 print(f"✅ Facebook carousel post successful: {result}")
                 
-                # Update content status
+                # Update content status in both created_content and content_posts tables
                 content_id = post_data.get('content_id')
                 if content_id:
                     published_at = datetime.now().isoformat()
-                    update_data = {
-                        "status": "published",
-                        "published_at": published_at,
-                        "facebook_post_id": result.get('id')
-                    }
-                    supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
+
+                    # Update created_content table with channel post ID
+                    try:
+                        created_content_update = {
+                            "status": "published",
+                            "channel_post_id": result.get('id'),
+                            "updated_at": published_at
+                        }
+                        supabase_admin.table("created_content").update(created_content_update).eq("id", content_id).eq("user_id", current_user.id).execute()
+                        print(f"✅ Updated created_content table with channel_post_id: {result.get('id')}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to update created_content table: {e}")
+
+                    # Also update content_posts table for backward compatibility
+                    try:
+                        update_data = {
+                            "status": "published",
+                            "published_at": published_at,
+                            "facebook_post_id": result.get('id')
+                        }
+                        supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
+                        print(f"✅ Updated content_posts table with facebook_post_id: {result.get('id')}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to update content_posts table: {e}")
                 
                 return {
                     "success": True,
@@ -3745,9 +3763,66 @@ async def post_to_facebook(
                 print(f"📋 Traceback: {traceback.format_exc()}")
 
                 # Don't fail the whole request if database update fails
-            
-            
-            
+
+            # Update content status in both created_content and content_posts tables
+            try:
+                content_id = post_data.get('content_id')
+
+                if content_id:
+                    published_at = datetime.now().isoformat()
+
+                    # Update created_content table with channel post ID
+                    try:
+                        created_content_update = {
+                            "status": "published",
+                            "channel_post_id": result.get('id'),
+                            "updated_at": published_at
+                        }
+                        supabase_admin.table("created_content").update(created_content_update).eq("id", content_id).eq("user_id", current_user.id).execute()
+                        print(f"✅ Updated created_content table with channel_post_id: {result.get('id')}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to update created_content table: {e}")
+
+                    # Also update content_posts table for backward compatibility
+                    try:
+                        # Get existing metadata first
+                        existing_post = supabase_admin.table("content_posts").select("metadata").eq("id", content_id).execute()
+                        existing_metadata = existing_post.data[0].get("metadata", {}) if existing_post.data else {}
+
+                        # Update metadata with post ID
+                        existing_metadata["facebook_post_id"] = result.get('id')
+
+                        update_data = {
+                            "status": "published",
+                            "published_at": published_at,
+                            "metadata": existing_metadata
+                        }
+
+                        print(f"🔄 Updating content_posts {content_id} status to published...")
+                        print(f"📝 Update data: {update_data}")
+
+                        update_response = supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
+
+                        if update_response.data:
+                            print(f"✅ Successfully updated content_posts table: {update_response.data}")
+                        else:
+                            print(f"⚠️ Update response has no data: {update_response}")
+                            # Try to get the current content to verify
+                            check_response = supabase_admin.table("content_posts").select("id, status").eq("id", content_id).execute()
+                            print(f"🔍 Current content_posts status: {check_response.data}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to update content_posts table: {e}")
+
+                else:
+                    print("⚠️ No content_id provided, skipping database update")
+
+            except Exception as e:
+                print(f"❌ Error updating content status in database: {e}")
+                import traceback
+                print(f"📋 Traceback: {traceback.format_exc()}")
+
+                # Don't fail the whole request if database update fails
+
             return {
 
                 "success": True,
@@ -4477,9 +4552,66 @@ async def post_to_linkedin(
             except Exception as e:
 
                 print(f"⚠️  Error updating last_posted_at: {e}")
-            
-            
-            
+
+            # Update content status in both created_content and content_posts tables
+            try:
+                content_id = post_data.get('content_id')
+
+                if content_id:
+                    published_at = datetime.now().isoformat()
+
+                    # Update created_content table with channel post ID
+                    try:
+                        created_content_update = {
+                            "status": "published",
+                            "channel_post_id": result.get('id'),
+                            "updated_at": published_at
+                        }
+                        supabase_admin.table("created_content").update(created_content_update).eq("id", content_id).eq("user_id", current_user.id).execute()
+                        print(f"✅ Updated created_content table with channel_post_id: {result.get('id')}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to update created_content table: {e}")
+
+                    # Also update content_posts table for backward compatibility
+                    try:
+                        # Get existing metadata first
+                        existing_post = supabase_admin.table("content_posts").select("metadata").eq("id", content_id).execute()
+                        existing_metadata = existing_post.data[0].get("metadata", {}) if existing_post.data else {}
+
+                        # Update metadata with post ID
+                        existing_metadata["linkedin_post_id"] = result.get('id')
+
+                        update_data = {
+                            "status": "published",
+                            "published_at": published_at,
+                            "metadata": existing_metadata
+                        }
+
+                        print(f"🔄 Updating content_posts {content_id} status to published...")
+                        print(f"📝 Update data: {update_data}")
+
+                        update_response = supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
+
+                        if update_response.data:
+                            print(f"✅ Successfully updated content_posts table: {update_response.data}")
+                        else:
+                            print(f"⚠️ Update response has no data: {update_response}")
+                            # Try to get the current content to verify
+                            check_response = supabase_admin.table("content_posts").select("id, status").eq("id", content_id).execute()
+                            print(f"🔍 Current content_posts status: {check_response.data}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to update content_posts table: {e}")
+
+                else:
+                    print("⚠️ No content_id provided, skipping database update")
+
+            except Exception as e:
+                print(f"❌ Error updating content status in database: {e}")
+                import traceback
+                print(f"📋 Traceback: {traceback.format_exc()}")
+
+                # Don't fail the whole request if database update fails
+
             return {
 
                 "success": True,
@@ -5111,26 +5243,41 @@ async def post_to_instagram(
                 post_id = publish_result.get('id')
                 print(f"✅ Instagram carousel post successful: {post_id}")
                 
-                # Update content status
+                # Update content status in both created_content and content_posts tables
                 content_id = post_data.get('content_id')
                 if content_id:
                     published_at = datetime.now().isoformat()
-                    # Get existing metadata first
+
+                    # Update created_content table with channel post ID
                     try:
+                        created_content_update = {
+                            "status": "published",
+                            "channel_post_id": post_id,
+                            "updated_at": published_at
+                        }
+                        supabase_admin.table("created_content").update(created_content_update).eq("id", content_id).eq("user_id", current_user.id).execute()
+                        print(f"✅ Updated created_content table with channel_post_id: {post_id}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to update created_content table: {e}")
+
+                    # Also update content_posts table for backward compatibility
+                    try:
+                        # Get existing metadata first
                         existing_post = supabase_admin.table("content_posts").select("metadata").eq("id", content_id).execute()
                         existing_metadata = existing_post.data[0].get("metadata", {}) if existing_post.data else {}
-                    except:
-                        existing_metadata = {}
-                    
-                    # Update metadata with post ID
-                    existing_metadata["instagram_post_id"] = post_id
-                    
-                    update_data = {
-                        "status": "published",
-                        "published_at": published_at,
-                        "metadata": existing_metadata
-                    }
-                    supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
+
+                        # Update metadata with post ID
+                        existing_metadata["instagram_post_id"] = post_id
+
+                        update_data = {
+                            "status": "published",
+                            "published_at": published_at,
+                            "metadata": existing_metadata
+                        }
+                        supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
+                        print(f"✅ Updated content_posts table with post_id in metadata: {post_id}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to update content_posts table: {e}")
                     
                 
                 # Try to get permalink from Instagram API, fallback to constructed URL
@@ -5401,53 +5548,60 @@ async def post_to_instagram(
 
         
         
-        # Update content status in Supabase to 'published'
+        # Update content status in both created_content and content_posts tables
 
         try:
-
             content_id = post_data.get('content_id')
 
             if content_id:
-
                 published_at = datetime.now().isoformat()
-                # Get existing metadata first
+
+                # Update created_content table with channel post ID
                 try:
+                    created_content_update = {
+                        "status": "published",
+                        "channel_post_id": post_id,
+                        "updated_at": published_at
+                    }
+                    supabase_admin.table("created_content").update(created_content_update).eq("id", content_id).eq("user_id", current_user.id).execute()
+                    print(f"✅ Updated created_content table with channel_post_id: {post_id}")
+                except Exception as e:
+                    print(f"⚠️ Failed to update created_content table: {e}")
+
+                # Also update content_posts table for backward compatibility
+                try:
+                    # Get existing metadata first
                     existing_post = supabase_admin.table("content_posts").select("metadata").eq("id", content_id).execute()
                     existing_metadata = existing_post.data[0].get("metadata", {}) if existing_post.data else {}
-                except:
-                    existing_metadata = {}
-                
-                # Update metadata with post ID
-                existing_metadata["instagram_post_id"] = post_id
-                
-                update_data = {
-                    "status": "published",
-                    "published_at": published_at,
-                    "metadata": existing_metadata
-                }
-                
-                print(f"🔄 Updating content {content_id} status to published...")
-                print(f"📝 Update data: {update_data}")
-                
-                update_response = supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
 
-                
-                
-                if update_response.data:
-                    print(f"✅ Successfully updated content status in database: {update_response.data}")
-                else:
-                    print(f"⚠️  Update response has no data: {update_response}")
-                    # Try to get the current content to verify
-                    check_response = supabase_admin.table("content_posts").select("id, status").eq("id", content_id).execute()
-                    print(f"🔍 Current content status: {check_response.data}")
-                
+                    # Update metadata with post ID
+                    existing_metadata["instagram_post_id"] = post_id
+
+                    update_data = {
+                        "status": "published",
+                        "published_at": published_at,
+                        "metadata": existing_metadata
+                    }
+
+                    print(f"🔄 Updating content_posts {content_id} status to published...")
+                    print(f"📝 Update data: {update_data}")
+
+                    update_response = supabase_admin.table("content_posts").update(update_data).eq("id", content_id).execute()
+
+                    if update_response.data:
+                        print(f"✅ Successfully updated content_posts table: {update_response.data}")
+                    else:
+                        print(f"⚠️ Update response has no data: {update_response}")
+                        # Try to get the current content to verify
+                        check_response = supabase_admin.table("content_posts").select("id, status").eq("id", content_id).execute()
+                        print(f"🔍 Current content_posts status: {check_response.data}")
+                except Exception as e:
+                    print(f"⚠️ Failed to update content_posts table: {e}")
 
             else:
-
-                print("⚠️  No content_id provided, skipping database update")
+                print("⚠️ No content_id provided, skipping database update")
 
         except Exception as e:
-
             print(f"❌ Error updating content status in database: {e}")
             import traceback
             print(f"📋 Traceback: {traceback.format_exc()}")

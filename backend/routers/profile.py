@@ -187,12 +187,18 @@ async def refresh_profile_embeddings(
     errors = []
     offset = 0
 
+    logger.info("Starting profile embedding refresh")
+    logger.info(f"Chunk size set to {limit}")
+
     while True:
         response = supabase_client.table("profiles").select("*").range(offset, offset + limit - 1).execute()
         profiles = response.data or []
 
         if not profiles:
+            logger.info("No more profiles fetched; ending loop")
             break
+
+        logger.info(f"Fetched {len(profiles)} profiles starting at offset {offset}")
 
         for profile in profiles:
             profile_id = profile.get("id")
@@ -218,8 +224,10 @@ async def refresh_profile_embeddings(
                 errors.append({"id": profile_id, "error": str(exc)})
 
         if len(profiles) < limit:
+            logger.info("Final batch processed")
             break
         offset += limit
+        logger.info(f"Moving to next batch with offset {offset}")
 
     return {
         "success": True,

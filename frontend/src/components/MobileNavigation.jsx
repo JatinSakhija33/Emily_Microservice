@@ -24,7 +24,8 @@ import {
   Bell,
   CheckCircle,
   Clock,
-  PanelRight
+  PanelRight,
+  Lightbulb
 } from 'lucide-react'
 
 const MobileNavigation = ({ 
@@ -120,6 +121,11 @@ const MobileNavigation = ({
       name: 'Social Media',
       href: '/social',
       icon: Share2
+    },
+    {
+      name: 'Suggestions',
+      href: '/post-suggestions',
+      icon: Lightbulb
     },
     // Temporarily hidden - Analytics dashboard
     // {

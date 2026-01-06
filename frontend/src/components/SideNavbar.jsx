@@ -169,6 +169,11 @@ const SideNavbar = () => {
       icon: DiscussionsIcon
     },
     {
+      name: 'Suggestions',
+      href: '/post-suggestions',
+      icon: Lightbulb
+    },
+    {
       name: 'Content',
       href: '/created-content',
       icon: FileText

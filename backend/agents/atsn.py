@@ -312,13 +312,30 @@ async def get_trends_from_grok(topic: str, business_context: dict) -> dict:
     current_date = current_datetime.strftime("%Y-%m-%d")
     current_time = current_datetime.strftime("%H:%M:%S UTC")
 
+    # Build location string for trend context
+    location_parts = []
+    if business_context.get('location_city'): location_parts.append(business_context['location_city'])
+    if business_context.get('location_state'): location_parts.append(business_context['location_state'])
+    if business_context.get('location_country'): location_parts.append(business_context['location_country'])
+    location_str = ", ".join(location_parts) if location_parts else "Global"
+
     trend_prompt = f"""You are a social media trend analyst. CURRENT DATE/TIME: {current_date} at {current_time}
 
-TASK: Identify current and emerging Instagram content trends related to the following topic. TOPIC: {topic} TARGET AUDIENCE: {business_context.get('target_audience', 'General audience')} PLATFORM: Instagram
+TASK: Identify current and emerging Instagram content trends related to the following topic.
+
+CONTEXT:
+TOPIC: {topic}
+TARGET AUDIENCE: {business_context.get('target_audience', 'General audience')}
+LOCATION: {location_str} (Prioritize trends relevant to this specific region/culture if applicable)
+PLATFORM: Instagram
 
 OUTPUT REQUIREMENTS: Return ONLY valid JSON in the following structure: {{ "trends": [ {{ "trend_name": "Short name of the trend", "description": "What this trend is about in 1–2 lines", "why_it_works": "Why this trend performs well on Instagram", "content_angle": "How a brand can use this trend", "example_hook": "An example opening hook or line", "recommended_format": "Feed Post | Reel | Carousel" }} ] }}
 
-RULES: - Provide 3 to 5 relevant trends - Trends must be practical and currently usable - No explanations outside the JSON"""
+RULES:
+- Provide 3 to 5 relevant trends
+- Trends must be practical and currently usable
+- IF LOCATION IS SPECIFIC: Prioritize local cultural moments, regional festivals, or location-specific memes.
+- No explanations outside the JSON"""
 
     # Log the complete trend analysis prompt
     logger.info(f"🎯 Complete trend analysis prompt being sent to Grok:")
@@ -410,7 +427,35 @@ def get_instagram_prompt(payload: dict, business_context: dict, parsed_trends: d
     brand_context = build_content_brand_context(profile_assets or {})
 
     return f"""
-You are a professional Instagram content creator and copywriter. CURRENT DATE/TIME: {current_date} at {current_time}
+You are an experienced  social media manager who has handled real brand accounts.
+
+Follow these creative principles strictly:
+
+- Never sound like marketing copy, corporate language, or an AI assistant.
+- Write like a human reacting to the moment, not a brand announcing something.
+- If a post feels forced, generic, promotional, or unnecessary, say so instead of inventing content.
+- Silence is a valid creative outcome.
+- Never explain the joke or over-clarify the idea.
+- Assume the audience is intelligent, culturally aware, and does not need spoon-feeding.
+- Prefer familiar, everyday situations over clever or abstract metaphors.
+- Fewer words signal confidence. Remove anything non-essential.
+- Subtlety beats loudness. Implication beats explanation.
+- Humor must feel natural to the brand’s personality — never attention-seeking.
+- Never punch down or mock the audience, professions, or vulnerabilities.
+- Reflect shared emotion, not personal opinion or moral commentary.
+- Avoid chasing virality. If it happens, it should feel accidental.
+- Do not use trending formats unless they feel brand-native.
+- Cultural memory is more powerful than internet trends.
+- Avoid repetition of hooks, structures, or obvious formats.
+- Trust is more important than engagement, especially for sensitive industries.
+- Prefer reactions over announcements.
+- Avoid CTAs unless they feel genuinely useful.
+- Slight imperfection is better than over-polished writing.
+- Think visually first, then write.
+- Contrast comes from the idea, not from exaggeration.
+- Protect long-term brand memory over short-term attention.
+
+CURRENT DATE/TIME: {current_date} at {current_time}
 
 BUSINESS CONTEXT:
 Brand Name: {business_context.get('business_name', 'Business')}
@@ -442,6 +487,8 @@ INSTAGRAM CONTENT REQUIREMENTS:
 TASK:
 Create a complete Instagram post optimized for engagement and relevance to the trend.
 
+Use the LOCATION CONTEXT to ground the humor or vibe. If a specific city or street is mentioned, make the content feel like it belongs to that specific place (e.g., local references, weather, traffic memes, or unspoken local rules).
+
 FORMAT (Return ONLY this format, no extra text):
 
 TITLE: [Hook-based title, max 60 characters]
@@ -452,7 +499,6 @@ CAPTION:
 HASHTAGS:
 [7–10 relevant Instagram hashtags, space-separated]
 """
-
 
 def get_platform_specific_prompt(platform: str, payload: dict, business_context: dict, parsed_trends: dict, profile_assets: dict = None) -> str:
     """Return platform-optimized prompt based on platform type"""
@@ -650,6 +696,14 @@ LOGO REQUIREMENTS (MANDATORY - NO EXCEPTIONS):
             image_prompt_enhancer = f"""
 You are an expert visual prompt engineer for AI image generation, specializing in Instagram content. CURRENT DATE/TIME: {current_date} at {current_time}
 
+Think like a senior brand designer, not a stock image generator.
+
+Avoid generic futuristic visuals, crowds, cityscapes, glowing screens, or random people.
+Prefer one strong visual idea over many elements.
+If the concept feels generic or overdone, simplify it.
+White space and restraint are allowed.
+The image should feel intentional, not decorative.
+
 INPUT CONTEXT:
 Platform: Instagram
 Post Format: {parsed_trends.get('format', 'Feed Post')}
@@ -682,7 +736,7 @@ IMAGE PROMPT REQUIREMENTS:
 - Include composition and camera perspective
 - Ensure Instagram-friendly framing (4:5 or square)
 - Avoid text-heavy visuals (no captions on image)
-- Avoid logos, watermarks, or brand names
+- Avoid any text EXCEPT the provided official brand logo
 - Photorealistic unless illustration fits better
 
 OUTPUT FORMAT (Return ONLY this JSON):
@@ -699,6 +753,14 @@ OUTPUT FORMAT (Return ONLY this JSON):
         user_message = user_query or payload.get('content_idea', 'Create a professional Instagram image')
         image_prompt_enhancer = f"""
 You are an expert visual prompt engineer for AI image generation, specializing in Instagram content. CURRENT DATE/TIME: {current_date} at {current_time}
+
+Think like a senior brand designer, not a stock image generator.
+
+Avoid generic futuristic visuals, crowds, cityscapes, glowing screens, or random people.
+Prefer one strong visual idea over many elements.
+If the concept feels generic or overdone, simplify it.
+White space and restraint are allowed.
+The image should feel intentional, not decorative.
 
 INPUT CONTEXT:
 Platform: Instagram
@@ -1011,6 +1073,10 @@ Business Location: {location_str}"""
 
         if timezone:
             location_context += f"\nTimezone: {timezone}"
+
+        if business_context.get('address'):
+             location_context += f"\nFull Address: {business_context['address']}"
+             location_context += f"\nStreet/Landmark Context: Look for visual cues related to this street address for hyper-local relevance."
 
         # Add location-specific imagery suggestions
         location_context += f"""

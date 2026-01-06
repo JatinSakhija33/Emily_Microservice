@@ -66,6 +66,7 @@ const ATSNContentModal = ({
   const [uploadingUserImage, setUploadingUserImage] = useState(false)
   const [imageUploadError, setImageUploadError] = useState('')
   const [imageSaved, setImageSaved] = useState(false)
+  const [uploadedImagePreview, setUploadedImagePreview] = useState('')
   const [showAIResult, setShowAIResult] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference)
@@ -294,12 +295,22 @@ const ATSNContentModal = ({
   const handleUserImageSelection = (event) => {
     const file = event.target.files?.[0]
 
+    // Clean up previous preview URL
+    if (uploadedImagePreview) {
+      URL.revokeObjectURL(uploadedImagePreview)
+    }
+
     if (file) {
       setUserImageFile(file)
       setImageUploadError('')
       setImageSaved(false)
+
+      // Create preview URL for the selected file
+      const previewUrl = URL.createObjectURL(file)
+      setUploadedImagePreview(previewUrl)
     } else {
       setUserImageFile(null)
+      setUploadedImagePreview('')
     }
   }
 
@@ -378,6 +389,7 @@ const ATSNContentModal = ({
       setSelectedImageForEdit(imageUrl)
       setShowImagePreview(false)
       setUserImageFile(null)
+      setUploadedImagePreview('')
       setImageSaved(true)
 
       if (fileInputRef.current) {
@@ -391,13 +403,6 @@ const ATSNContentModal = ({
     }
   }
 
-  const handleSaveImageClick = () => {
-    if (userImageFile) {
-      handleUploadUserImage()
-    } else if (!uploadingUserImage) {
-      fileInputRef.current?.click()
-    }
-  }
 
   const handleImageClick = (imageUrl, imageType) => {
     if (showImagePreview) {
@@ -411,6 +416,25 @@ const ATSNContentModal = ({
       onImageEditorOpened?.()
     }
   }, [autoOpenImageEditor, initialImageEditorUrl, openImageEditSession, onImageEditorOpened])
+
+  // Cleanup uploaded image preview URL
+  useEffect(() => {
+    return () => {
+      if (uploadedImagePreview) {
+        URL.revokeObjectURL(uploadedImagePreview)
+      }
+    }
+  }, [uploadedImagePreview])
+
+  // Cleanup when modal closes
+  useEffect(() => {
+    if (!showImageEditModal && uploadedImagePreview) {
+      URL.revokeObjectURL(uploadedImagePreview)
+      setUploadedImagePreview('')
+      setUserImageFile(null)
+      setImageSaved(false)
+    }
+  }, [showImageEditModal, uploadedImagePreview])
 
   const handleAIEdit = (field) => {
     setAiEditType(field)
@@ -1384,10 +1408,13 @@ const ATSNContentModal = ({
                           isDarkMode ? 'text-gray-300' : 'text-gray-700'
                         }`}>
                           Image to Edit:
+                          {uploadedImagePreview && (
+                            <span className="ml-2 text-xs text-green-500">(Uploaded)</span>
+                          )}
                         </h4>
                         <div className="flex justify-center">
                           <img
-                            src={editingImage}
+                            src={uploadedImagePreview || editingImage}
                             alt="Image to edit"
                             className="max-w-full max-h-80 object-contain rounded-lg border-2 border-blue-500"
                           />
@@ -1470,13 +1497,30 @@ const ATSNContentModal = ({
                 {/* Upload + Action Buttons */}
                 <div className="flex flex-wrap items-center justify-between gap-3 mt-6 pt-4">
                   <div className="flex items-center gap-2">
+                    {/* Upload Image Button */}
                     <button
-                      onClick={handleSaveImageClick}
+                      onClick={() => fileInputRef.current?.click()}
                       disabled={uploadingUserImage}
-                      className="px-3 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-pink-500 to-purple-600 disabled:opacity-50"
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        isDarkMode
+                          ? 'text-gray-200 bg-gray-700 hover:bg-gray-600 disabled:opacity-50'
+                          : 'text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50'
+                      }`}
                     >
-                      {uploadingUserImage ? 'Saving…' : imageSaved ? 'Image Saved' : 'Save Image'}
+                      {uploadingUserImage ? 'Uploading…' : 'Upload Image'}
                     </button>
+
+                    {/* Save Image Button */}
+                    {userImageFile && (
+                      <button
+                        onClick={() => handleUploadUserImage(userImageFile)}
+                        disabled={uploadingUserImage || imageSaved}
+                        className="px-3 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-pink-500 to-purple-600 disabled:opacity-50"
+                      >
+                        {uploadingUserImage ? 'Saving…' : imageSaved ? 'Image Saved' : 'Save Image'}
+                      </button>
+                    )}
+
                     <input
                       ref={fileInputRef}
                       type="file"
