@@ -899,7 +899,7 @@ async def generate_content_for_user(
 
         # Check credits before starting content generation
         await check_credits_before_action(current_user.id, 'task')
-
+        
         # Initialize progress
         await update_progress(
             current_user.id,
@@ -907,14 +907,14 @@ async def generate_content_for_user(
             0,
             "Starting content generation..."
         )
-
+        
         # Run content generation in background
         background_tasks.add_task(
             run_content_generation_with_progress,
             current_user.id,
             generate_images
         )
-
+        
         return {"message": "Content generation started", "user_id": current_user.id, "generate_images": generate_images}
         
     except Exception as e:

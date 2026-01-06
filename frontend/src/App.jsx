@@ -216,12 +216,12 @@ function AppContent() {
         />
         {/* Temporarily hidden - Analytics dashboard */}
         {/* <Route
-          path="/analytics"
+          path="/analytics" 
           element={
             <ProtectedRoute>
               <AnalyticsDashboard />
             </ProtectedRoute>
-          }
+          } 
         /> */}
         <Route
           path="/leads"

@@ -446,7 +446,7 @@ const SideNavbar = () => {
           <span className="font-medium">Say Bye</span>
         </button>
 
-      </div>
+        </div>
 
       {/* Usage Stats Section */}
       <div className={`px-4 py-3 border-t ${

@@ -85,35 +85,6 @@ async def increment_agent_likes(agent_name: str, current_user: User = Depends(ge
         logger.error(f"Error incrementing likes for agent {agent_name}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error incrementing likes count: {str(e)}")
 
-@router.post("/increment-task")
-async def increment_task_count(current_user: User = Depends(get_current_user)):
-    """Increment task count when a task is actually completed and displayed"""
-    try:
-        # Read current task count and increment
-        current_response = supabase_client.table('profiles').select('tasks_completed_this_month').eq('id', current_user.id).execute()
-
-        if not current_response.data or len(current_response.data) == 0:
-            raise HTTPException(status_code=404, detail="User profile not found")
-
-        current_count = current_response.data[0]['tasks_completed_this_month'] or 0
-
-        # Increment task count
-        update_response = supabase_client.table('profiles').update({
-            'tasks_completed_this_month': current_count + 1
-        }).eq('id', current_user.id).execute()
-
-        if not update_response.data:
-            raise HTTPException(status_code=500, detail="Failed to update task count")
-
-        logger.info(f"Incremented task count for user {current_user.id} after task completion (from {current_count} to {current_count + 1})")
-        return {"success": True, "new_task_count": current_count + 1}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error incrementing task count for user {current_user.id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error incrementing task count: {str(e)}")
-
 @router.get("/usage-stats")
 async def get_usage_stats(current_user: User = Depends(get_current_user)):
     """Get user's current usage statistics"""

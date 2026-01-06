@@ -316,7 +316,7 @@ const SubscriptionSelector = () => {
                 <Home className="w-4 h-4" />
                 <span className="text-sm font-medium">Dashboard</span>
               </button>
-
+              
               <button
                 onClick={() => window.open('/help', '_blank')}
                 className="flex items-center space-x-2 px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
@@ -324,7 +324,7 @@ const SubscriptionSelector = () => {
                 <HelpCircle className="w-4 h-4" />
                 <span className="text-sm font-medium">Help</span>
               </button>
-
+              
               <button
                 onClick={() => window.location.href = '/profile'}
                 className="flex items-center space-x-2 px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
@@ -332,9 +332,9 @@ const SubscriptionSelector = () => {
                 <Settings className="w-4 h-4" />
                 <span className="text-sm font-medium">Settings</span>
               </button>
-
+              
               <div className="h-6 w-px bg-gray-600"></div>
-
+              
               <button
                 onClick={handleLogout}
                 disabled={isLoggingOut}
@@ -360,7 +360,7 @@ const SubscriptionSelector = () => {
               >
                 <Home className="w-5 h-5" />
               </button>
-
+              
               <button
                 onClick={() => window.open('/help', '_blank')}
                 className="p-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
@@ -368,7 +368,7 @@ const SubscriptionSelector = () => {
               >
                 <HelpCircle className="w-5 h-5" />
               </button>
-
+              
               <button
                 onClick={() => window.location.href = '/profile'}
                 className="p-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
@@ -376,9 +376,9 @@ const SubscriptionSelector = () => {
               >
                 <Settings className="w-5 h-5" />
               </button>
-
+              
               <div className="h-6 w-px bg-gray-600"></div>
-
+              
               <button
                 onClick={handleLogout}
                 disabled={isLoggingOut}
@@ -402,7 +402,7 @@ const SubscriptionSelector = () => {
         {/* Header */}
         <div className="text-center mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-normal mb-3 sm:mb-4 text-white">
-            Choose Your Plan
+              Choose Your Plan
           </h1>
           <p className="text-base sm:text-lg text-gray-300 mb-4 sm:mb-6 px-4 sm:px-0">
             Select a subscription plan to continue with your Emily setup
@@ -468,8 +468,8 @@ const SubscriptionSelector = () => {
             // Make comparison case-insensitive to handle variations
             const currentPlanLower = currentPlan ? currentPlan.toLowerCase().trim() : '';
             const planNameLower = plan.name ? plan.name.toLowerCase().trim() : '';
-            const isCurrentPaidPlan = !isFreeTrial && currentPlan &&
-                                     (currentPlanLower === planNameLower ||
+            const isCurrentPaidPlan = !isFreeTrial && currentPlan && 
+                                     (currentPlanLower === planNameLower || 
                                       currentPlanLower.startsWith(planNameLower + '_') ||
                                       planNameLower === currentPlanLower ||
                                       (planNameLower === 'freemium' && currentPlanLower === 'free'));
@@ -578,7 +578,7 @@ const SubscriptionSelector = () => {
                     ? 'bg-gradient-to-br from-pink-900/30 to-purple-900/30 border-[#FF4D94] shadow-md'
                     : isAdvanced
                     ? 'bg-gradient-to-br from-gray-700 to-gray-800 border-pink-500/50 shadow-lg hover:shadow-xl'
-                    : isPro
+                    : isPro 
                     ? 'bg-gray-800 border-purple-500/50 shadow-lg hover:shadow-xl'
                     : 'bg-gray-800 border-gray-600 hover:border-[#9E005C] hover:shadow-lg'
                 }`}
@@ -591,7 +591,7 @@ const SubscriptionSelector = () => {
                     </div>
                   </div>
                 )}
-
+                
                 {isTrialExpired && !isPaidPlanActive && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                     <div className="bg-gray-500 text-white px-3 py-1 rounded-full text-xs font-medium">
@@ -599,7 +599,7 @@ const SubscriptionSelector = () => {
                     </div>
                   </div>
                 )}
-
+                
                 {isPaidPlanExpired && !isPaidPlanActive && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                     <div className="bg-gray-500 text-white px-3 py-1 rounded-full text-xs font-medium">
@@ -607,7 +607,7 @@ const SubscriptionSelector = () => {
                     </div>
                   </div>
                 )}
-
+                
                 {isTrialAlreadyActive && !isPaidPlanActive && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                     <div className="bg-gradient-to-r from-[#FF4D94] to-[#9E005C] text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
@@ -615,7 +615,7 @@ const SubscriptionSelector = () => {
                     </div>
                   </div>
                 )}
-
+                
                 {/* Show "Most Popular" for Advanced plan if not active */}
                 {isAdvanced && !isPaidPlanActive && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
@@ -644,10 +644,10 @@ const SubscriptionSelector = () => {
                       </div>
                       {(trialInfo?.trial_expires_at || trialInfo?.trial_end) && (
                         <div className="text-xs text-gray-400 mt-1">
-                          Expires: {new Date(trialInfo.trial_expires_at || trialInfo.trial_end).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric'
+                          Expires: {new Date(trialInfo.trial_expires_at || trialInfo.trial_end).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
                           })}
                         </div>
                       )}
@@ -668,7 +668,7 @@ const SubscriptionSelector = () => {
                   {(() => {
                     // Handle features from database (JSONB array)
                     let featuresArray = [];
-
+                    
                     if (Array.isArray(plan.features)) {
                       featuresArray = plan.features;
                     } else if (typeof plan.features === 'string') {
@@ -687,7 +687,7 @@ const SubscriptionSelector = () => {
                         featuresArray = [];
                       }
                     }
-
+                    
                     // Ensure we have a valid array
                     if (!Array.isArray(featuresArray)) {
                       featuresArray = [];

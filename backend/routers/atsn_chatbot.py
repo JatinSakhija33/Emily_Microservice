@@ -398,3 +398,175 @@ async def get_atsn_conversations(
             "conversations": [],
             "count": 0
         }
+
+
+@router.post("/conversations/incremental-save")
+async def incremental_save_conversation(
+    conversation_data: dict,
+    current_user=Depends(get_current_user)
+):
+    """Save only new messages since last save to optimize performance"""
+    try:
+        user_id = current_user.id
+        session_id = conversation_data.get("session_id")
+        new_messages = conversation_data.get("messages", [])
+        last_saved_timestamp = conversation_data.get("last_saved_timestamp")
+
+        if not session_id or not isinstance(new_messages, list):
+            raise HTTPException(status_code=400, detail="Invalid conversation data")
+
+        logger.info(f"Incremental saving {len(new_messages)} messages for user {user_id}, session {session_id}")
+
+        # Check if conversation already exists
+        existing_conv = supabase_client.table("atsn_conversations").select("*").eq("session_id", session_id).eq("user_id", user_id).execute()
+
+        if existing_conv.data and len(existing_conv.data) > 0:
+            conversation_id = existing_conv.data[0]["id"]
+            logger.info(f"Updating existing conversation {conversation_id}")
+        else:
+            # Create new conversation
+            today = datetime.now(timezone.utc).date()
+            conversation_data = {
+                "user_id": user_id,
+                "session_id": session_id,
+                "conversation_date": today.isoformat(),
+                "primary_agent_name": "atsn",
+                "is_active": True
+            }
+
+            new_conv = supabase_client.table("atsn_conversations").insert(conversation_data).execute()
+            conversation_id = new_conv.data[0]["id"]
+            logger.info(f"Created new conversation {conversation_id}")
+
+        # Filter only messages after last save (if timestamp provided)
+        if last_saved_timestamp:
+            try:
+                last_saved = datetime.fromisoformat(last_saved_timestamp.replace('Z', '+00:00'))
+                new_messages = [msg for msg in new_messages
+                               if datetime.fromisoformat(msg["timestamp"].replace('Z', '+00:00')) > last_saved]
+                logger.info(f"Filtered to {len(new_messages)} messages after last save")
+            except (ValueError, KeyError):
+                logger.warning("Invalid last_saved_timestamp format, saving all messages")
+
+        if not new_messages:
+            logger.info("No new messages to save")
+            return {"status": "success", "conversation_id": conversation_id, "messages_saved": 0}
+
+        # Get current max sequence for this conversation
+        existing_msgs = supabase_client.table("atsn_conversation_messages").select("message_sequence").eq("conversation_id", conversation_id).order("message_sequence", desc=False).execute()
+
+        max_sequence = 0
+        if existing_msgs.data and len(existing_msgs.data) > 0:
+            max_sequence = max([msg["message_sequence"] for msg in existing_msgs.data])
+
+        # Prepare messages for insertion
+        messages_to_insert = []
+        for i, msg in enumerate(new_messages):
+            message_data = {
+                "conversation_id": conversation_id,
+                "user_id": user_id,
+                "message_sequence": max_sequence + i + 1,
+                "message_type": msg.get("sender", "user"),
+                "content": msg.get("text", ""),
+                "created_at": msg.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                "intent": msg.get("intent"),
+                "agent_name": msg.get("agent_name"),
+                "current_step": msg.get("current_step"),
+                "clarification_question": msg.get("clarification_question"),
+                "clarification_options": msg.get("clarification_options"),
+                "content_items": msg.get("content_items"),
+                "lead_items": msg.get("lead_items")
+            }
+            messages_to_insert.append(message_data)
+
+        # Batch insert messages
+        supabase_client.table("atsn_conversation_messages").insert(messages_to_insert).execute()
+
+        logger.info(f"Successfully saved {len(messages_to_insert)} new messages to conversation {conversation_id}")
+
+        return {
+            "status": "success",
+            "conversation_id": conversation_id,
+            "messages_saved": len(messages_to_insert),
+            "last_saved_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error incremental saving conversation: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save conversation")
+
+
+@router.post("/conversations/save-complete")
+async def save_complete_conversation(
+    conversation_data: dict,
+    current_user=Depends(get_current_user)
+):
+    """Save complete conversation when intent is fully completed"""
+    try:
+        user_id = current_user.id
+        session_id = conversation_data.get("session_id")
+        messages = conversation_data.get("messages", [])
+
+        if not session_id or not isinstance(messages, list):
+            raise HTTPException(status_code=400, detail="Invalid conversation data")
+
+        logger.info(f"Saving complete conversation with {len(messages)} messages for user {user_id}, session {session_id}")
+
+        # Check if conversation already exists
+        existing_conv = supabase_client.table("atsn_conversations").select("*").eq("session_id", session_id).eq("user_id", user_id).execute()
+
+        if existing_conv.data and len(existing_conv.data) > 0:
+            conversation_id = existing_conv.data[0]["id"]
+            logger.info(f"Updating existing conversation {conversation_id}")
+        else:
+            # Create new conversation
+            today = datetime.now(timezone.utc).date()
+            conversation_data = {
+                "user_id": user_id,
+                "session_id": session_id,
+                "conversation_date": today.isoformat(),
+                "primary_agent_name": "atsn",
+                "is_active": True
+            }
+
+            new_conv = supabase_client.table("atsn_conversations").insert(conversation_data).execute()
+            conversation_id = new_conv.data[0]["id"]
+            logger.info(f"Created new conversation {conversation_id}")
+
+        # Delete any existing messages for this conversation (to avoid duplicates)
+        supabase_client.table("atsn_conversation_messages").delete().eq("conversation_id", conversation_id).execute()
+
+        # Prepare messages for insertion
+        messages_to_insert = []
+        for i, msg in enumerate(messages):
+            message_data = {
+                "conversation_id": conversation_id,
+                "user_id": user_id,
+                "message_sequence": i + 1,
+                "message_type": msg.get("sender", "user"),
+                "content": msg.get("text", ""),
+                "created_at": msg.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                "intent": msg.get("intent"),
+                "agent_name": msg.get("agent_name"),
+                "current_step": msg.get("step"),
+                "clarification_question": msg.get("clarification_question"),
+                "clarification_options": msg.get("clarification_options"),
+                "content_items": msg.get("content_items"),
+                "lead_items": msg.get("lead_items")
+            }
+            messages_to_insert.append(message_data)
+
+        # Batch insert all messages
+        supabase_client.table("atsn_conversation_messages").insert(messages_to_insert).execute()
+
+        logger.info(f"Successfully saved complete conversation with {len(messages_to_insert)} messages to conversation {conversation_id}")
+
+        return {
+            "status": "success",
+            "conversation_id": conversation_id,
+            "messages_saved": len(messages_to_insert)
+        }
+
+    except Exception as e:
+        logger.error(f"Error saving complete conversation: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save conversation")

@@ -246,7 +246,7 @@ function CreatedContentDashboard() {
   const handleDelete = async (contentItem) => {
     setItemToDelete(contentItem)
     setShowDeleteModal(true)
-  }
+    }
 
   const confirmDelete = async () => {
     if (!itemToDelete) return
@@ -1146,10 +1146,26 @@ function CreatedContentDashboard() {
               {Array.isArray(filteredContent) && filteredContent.map((contentItem) => {
                 // Extract media URL from various possible fields
                 let mediaUrl = null;
+                let thumbnailUrl = null;
                 let isVideo = false;
+
+                // Helper function to generate thumbnail URL
+                const getThumbnailUrl = (url) => {
+                  if (!url) return null;
+
+                  // For Supabase storage URLs, add transform parameters for thumbnail
+                  if (url.includes('supabase.co') && url.includes('/storage/v1/object/public/')) {
+                    // Add width and height parameters for thumbnail (200x200)
+                    return `${url}?width=200&height=200&resize=contain&quality=80`;
+                  }
+
+                  // For other image URLs, return original (could add more logic here)
+                  return url;
+                };
 
                 if (contentItem.media_url) {
                   mediaUrl = contentItem.media_url;
+                  thumbnailUrl = getThumbnailUrl(mediaUrl);
                   // Check if it's a video file
                   isVideo = mediaUrl.match(/\.(mp4|mov|avi|webm|m4v)$/i) ||
                            mediaUrl.includes('video') ||
@@ -1157,10 +1173,13 @@ function CreatedContentDashboard() {
                            contentItem.content_type === 'short_video or reel';
                 } else if (contentItem.images && Array.isArray(contentItem.images) && contentItem.images.length > 0) {
                   mediaUrl = contentItem.images[0];
+                  thumbnailUrl = getThumbnailUrl(mediaUrl);
                 } else if (contentItem.image_url) {
                   mediaUrl = contentItem.image_url;
+                  thumbnailUrl = getThumbnailUrl(mediaUrl);
                 } else if (contentItem.metadata && contentItem.metadata.image_url) {
                   mediaUrl = contentItem.metadata.image_url;
+                  thumbnailUrl = getThumbnailUrl(mediaUrl);
                 }
 
                 const hasMedia = mediaUrl && mediaUrl.trim();
@@ -1186,11 +1205,16 @@ function CreatedContentDashboard() {
                       />
                     ) : (
                       <img
-                        src={mediaUrl}
+                        src={thumbnailUrl || mediaUrl}
                         alt={contentItem.title || 'Content'}
                         className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                         onError={(e) => {
-                          e.target.style.display = 'none';
+                          // Fallback to original URL if thumbnail fails
+                          if (e.target.src !== mediaUrl) {
+                            e.target.src = mediaUrl;
+                          } else {
+                            e.target.style.display = 'none';
+                          }
                         }}
                       />
                     )}

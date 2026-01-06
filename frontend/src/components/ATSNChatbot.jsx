@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
-import { Send, ArrowRight, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone, Heart } from 'lucide-react'
+import { Send, ArrowRight, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone, Heart, Check, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import ContentCard from './ContentCard'
@@ -107,14 +107,20 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const [thinkingPhase, setThinkingPhase] = useState(0) // 0: assigning, 1: contacting, 2: invoking, 3: working
   const [isFirstMessage, setIsFirstMessage] = useState(true) // Track if this is the first message in session
   const [showMediaUploadModal, setShowMediaUploadModal] = useState(false)
+
+  // Conversation caching system
+  const [messageCache, setMessageCache] = useState([])
+  const [sessionStartTime, setSessionStartTime] = useState(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('saved') // 'saved', 'saving', 'unsaved', 'error'
   const [uploadedMediaUrls, setUploadedMediaUrls] = useState([])
   const [selectedFilesForUpload, setSelectedFilesForUpload] = useState([])
+  const [businessName, setBusinessName] = useState('') // Business name from profile
   const [isUploadingMedia, setIsUploadingMedia] = useState(false)
   const [tooltipAgent, setTooltipAgent] = useState(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference)
   const [likedMessages, setLikedMessages] = useState(new Set())
-  const [countedTasks, setCountedTasks] = useState(new Set())
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const lastExternalConversationsRef = useRef(null)
@@ -311,11 +317,29 @@ const ATSNChatbot = ({ externalConversations = null }) => {
           data.conversations.forEach(conv => {
             if (conv.messages && conv.messages.length > 0) {
               conv.messages.forEach(msg => {
+                console.log('Processing message:', msg.text)
+                // Clean message text to remove stray characters like })}
+                let cleanText = msg.text || '';
+                console.log('Before cleaning loaded message:', cleanText)
+                // Remove trailing )} patterns (with or without whitespace)
+                cleanText = cleanText.replace(/\s*\)\s*\}\s*$/g, '').trim();
+                // Remove any standalone )} patterns
+                cleanText = cleanText.replace(/\s*\)\s*\}\s*/g, '');
+                // Remove leading ( and whitespace
+                cleanText = cleanText.replace(/^[(\s]*/g, '').trim();
+                console.log('After cleaning loaded message:', cleanText)
+
+                // Skip messages that are just stray characters
+                if (cleanText.length === 0 || /^[)}\s\(\{\[\]\*]+$/.test(cleanText)) {
+                  console.log('Skipping corrupted message:', cleanText)
+                  return;
+                }
+
                 allMessages.push({
                   id: msg.id,
                   conversationId: conv.id,
                   sender: msg.sender,
-                  text: msg.text,
+                  text: cleanText,
                   timestamp: msg.timestamp,
                   intent: msg.intent,
                   agent_name: msg.agent_name,
@@ -346,8 +370,47 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     // Don't show automatic welcome message - only show when "New Chat" is clicked
   }
 
-  // Load conversations when component mounts
+  // Initialize session tracking and handle external conversations
   useEffect(() => {
+    // Track session start time for caching
+    if (user && !sessionStartTime) {
+      setSessionStartTime(new Date().toISOString())
+    }
+
+    // Load business name from profile
+    const loadBusinessName = async () => {
+      if (!user) return
+
+      try {
+        // Try to fetch from profiles table
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('business_name, name')
+          .eq('id', user.id)
+          .single()
+
+        if (error) {
+          console.error('Error fetching profile for business name:', error)
+          setBusinessName('Your Business') // Fallback
+          return
+        }
+
+        // Use business_name if available, otherwise use name or fallback
+        const name = profile?.business_name || profile?.name || 'Your Business'
+        setBusinessName(name)
+      } catch (error) {
+        console.error('Error loading business name:', error)
+        setBusinessName('Your Business') // Fallback
+      }
+    }
+
+    loadBusinessName()
+  }, [user])
+
+
+  // Initialize session tracking and handle external conversations
+  useEffect(() => {
+
     // Don't load external conversations if chat was reset
     if (chatReset) {
       setChatReset(false) // Reset the flag
@@ -360,18 +423,16 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       return
     }
 
+    // Load external conversations from history (no automatic loading)
     if (externalConversations) {
-      // Load external conversations (from past discussions panel)
       console.log('Loading external conversations:', externalConversations)
       setMessages(externalConversations)
-      // Scroll to bottom after loading external conversations
+      setMessageCache([]) // Clear cache since we're loading from history
+      setHasUnsavedChanges(false)
       setTimeout(() => scrollToBottom(), 100)
-    } else if (user && messages.length === 0) {
-      // Load conversations from database
-      console.log('Loading conversations for user:', user)
-      loadConversations()
     }
-  }, [user, externalConversations, chatReset, resetTimestamp])
+    // Note: Automatic conversation loading is disabled for better performance
+  }, [user, externalConversations, chatReset, resetTimestamp, sessionStartTime])
 
   // Reset scroll flag when chat is reset
   useEffect(() => {
@@ -391,34 +452,6 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     }
   }, [messages.length])
 
-  // Detect and count completed tasks when results are displayed
-  useEffect(() => {
-    if (messages.length > 0) {
-      const lastMessage = messages[messages.length - 1]
-
-      // Only count bot messages that contain actual task results and haven't been counted yet
-      if (lastMessage.sender === 'bot' && !countedTasks.has(lastMessage.id)) {
-        const hasContentResults = lastMessage.content_items && lastMessage.content_items.length > 0
-        const hasLeadResults = lastMessage.lead_items && lastMessage.lead_items.length > 0
-        const isMeaningfulIntent = lastMessage.intent && [
-          'create_content', 'edit_content', 'publish_content',
-          'delete_content', 'schedule_content', 'create_lead',
-          'edit_lead', 'delete_lead', 'show_leads'
-        ].includes(lastMessage.intent.toLowerCase())
-
-        // Count task if it has results OR is a meaningful completed intent
-        if (hasContentResults || hasLeadResults || isMeaningfulIntent) {
-          // Mark as counted and increment
-          setCountedTasks(prev => new Set([...prev, lastMessage.id]))
-
-          // Use a timeout to avoid counting during rapid updates
-          setTimeout(() => {
-            incrementTaskCount()
-          }, 500)
-        }
-      }
-    }
-  }, [messages])
 
   // Load today's conversations (similar to Chatbot.jsx)
   const loadTodayConversations = async () => {
@@ -652,29 +685,80 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     }
   }
 
-  const incrementTaskCount = async () => {
+
+  // Save cached messages to database
+  const saveCachedMessages = async (force = false) => {
+    if (messageCache.length === 0 && !force) return
+
+    setSaveStatus('saving')
     try {
       const token = await getAuthToken()
-      if (!token) {
-        console.error('No auth token available for task increment')
-        return
+      if (!token) return
+
+      const conversationData = {
+        session_id: `session-${user.id}-${sessionStartTime}`,
+        messages: messageCache,
       }
 
-      const response = await fetch(`${API_BASE_URL}/profile/increment-task`, {
+      const response = await fetch(`${API_BASE_URL}/atsn/conversations/incremental-save`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(conversationData)
       })
 
       if (response.ok) {
-        console.log('Task count incremented successfully')
+        const data = await response.json()
+        console.log('Successfully saved cached messages to database')
+        setMessageCache([])
+        setHasUnsavedChanges(false)
+        setSaveStatus('saved')
       } else {
-        console.error('Failed to increment task count')
+        throw new Error('Save failed')
       }
     } catch (error) {
-      console.error('Error incrementing task count:', error)
+      console.error('Error saving cached messages:', error)
+      setSaveStatus('error')
+      // Don't clear cache on error - retry later
+    }
+  }
+
+  // Save complete conversation when intent is fully completed
+  const saveCompleteConversation = async () => {
+    if (messageCache.length === 0) return
+
+    setSaveStatus('saving')
+    try {
+      const token = await getAuthToken()
+      if (!token) return
+
+      const conversationData = {
+        session_id: `session-${user.id}-${sessionStartTime}`,
+        messages: messageCache
+      }
+
+      const response = await fetch(`${API_BASE_URL}/atsn/conversations/save-complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(conversationData)
+      })
+
+      if (response.ok) {
+        console.log('Successfully saved complete conversation to database')
+        setMessageCache([])
+        setHasUnsavedChanges(false)
+        setSaveStatus('saved')
+      } else {
+        throw new Error('Save failed')
+      }
+    } catch (error) {
+      console.error('Error saving complete conversation:', error)
+      setSaveStatus('error')
     }
   }
 
@@ -684,17 +768,25 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     const userMessage = inputMessage.trim()
     const messageId = Date.now()
 
-    // Add user message
-    setMessages(prev => [...prev, {
+    // Create user message object
+    const userMessageObj = {
       id: messageId,
       sender: 'user',
-      text: userMessage,
+      text: userMessage.trim(),
       timestamp: new Date().toISOString()
-    }])
+    }
 
-    // Calculate updated conversation history (don't rely on async state update)
+    // Add user message to UI
+    setMessages(prev => [...prev, userMessageObj])
+
+    // Cache the message
+    setMessageCache(prev => [...prev, userMessageObj])
+    setHasUnsavedChanges(true)
+    setSaveStatus('unsaved')
+
+    // Calculate updated conversation history
     const updatedHistory = [...conversationHistory, userMessage]
-    
+
     // Store the message for loading detection
     setLastSentMessage(inputMessage)
 
@@ -706,7 +798,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     try {
       // Get token from session
       const token = await getAuthToken()
-      
+
       if (!token) {
         throw new Error('No authentication session found. Please log in again.')
       }
@@ -719,7 +811,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         },
         body: JSON.stringify({
           message: userMessage,
-          conversation_history: updatedHistory
+          conversation_history: updatedHistory,
+          session_id: `session-${user.id}-${sessionStartTime}`,
+          agent_status: agentStatus,
+          thinking_phase: thinkingPhase,
+          is_first_message: isFirstMessage
         })
       })
 
@@ -732,12 +828,25 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       const data = await response.json()
 
+      // Debug: log the raw response
+      console.log('Raw API response:', data.response)
 
-      // Add bot response
-      setMessages(prev => [...prev, {
+      // Clean response text to remove stray characters
+      let cleanResponse = data.response || '';
+      console.log('Before cleaning:', cleanResponse)
+      // Remove trailing )} patterns (with or without whitespace)
+      cleanResponse = cleanResponse.replace(/\s*\)\s*\}\s*$/g, '').trim();
+      // Remove any standalone )} patterns
+      cleanResponse = cleanResponse.replace(/\s*\)\s*\}\s*/g, '');
+      // Remove leading ( and whitespace
+      cleanResponse = cleanResponse.replace(/^[(\s]*/g, '').trim();
+      console.log('After cleaning:', cleanResponse)
+
+      // Create bot message object
+      const botMessageObj = {
         id: Date.now(),
         sender: 'bot',
-        text: data.response,
+        text: cleanResponse,
         timestamp: new Date().toISOString(),
         intent: data.intent,
         step: data.current_step,
@@ -755,13 +864,19 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         clarification_data: data.clarification_data,
         needs_connection: data.needs_connection || false,
         connection_platform: data.connection_platform || null
-      }])
+      }
+
+      // Add bot response to UI
+      setMessages(prev => [...prev, botMessageObj])
+
+      // Cache the bot message
+      setMessageCache(prev => [...prev, botMessageObj])
 
       // Auto-open upload modal if waiting for upload
       if (data.waiting_for_upload) {
         setTimeout(() => {
           setShowMediaUploadModal(true)
-        }, 500) // Small delay to ensure modal renders properly
+        }, 500)
       }
 
       // Update agent status
@@ -772,18 +887,31 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         complete: data.payload_complete
       })
 
+      // Save complete conversation when intent is fully completed
+      if (data.payload_complete && messageCache.length > 0) {
+        console.log('Intent completed, saving conversation to database')
+        saveCompleteConversation()
+      }
+
+      // Update thinking phase
+      setIsFirstMessage(false)
+      setThinkingPhase(0)
+
     } catch (error) {
       console.error('Error sending message:', error)
       const errorMessage = error.message || 'Failed to send message. Please try again.'
       showError(errorMessage)
-      
-      setMessages(prev => [...prev, {
+
+      const errorMessageObj = {
         id: Date.now(),
         sender: 'bot',
         text: `❌ ${errorMessage}\n\n${error.message?.includes('authentication') ? 'Please refresh the page and log in again.' : 'Please try again or reset the conversation.'}`,
         timestamp: new Date().toISOString(),
         error: true
-      }])
+      }
+
+      setMessages(prev => [...prev, errorMessageObj])
+      setMessageCache(prev => [...prev, errorMessageObj])
     } finally {
       setIsLoading(false)
       setLastSentMessage('')
@@ -863,17 +991,9 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       setFreshReset(true) // Prevent loading conversations after reset
       setResetTimestamp(Date.now()) // Record when reset happened
 
-      // Clear all messages and show welcome message
-      setMessages([{
-        id: 'welcome-new-chat',
-        sender: 'bot',
-        text: `Welcome to atsn ai Discussions!\n\nHi! This is your atsn ai team - **Emily** (content creation & strategy), **Leo** (lead nurturing & CRM), **Chase** (social media & analytics), and **Orion** (creative design & media).\n\nTogether we help you create compelling content, manage publications across platforms, and nurture leads effectively.\n\nWhat would you like to do today?`,
-        timestamp: new Date().toISOString(),
-        intent: null,
-        agent_name: 'atsn ai' // Special agent name for welcome message
-      }])
-
-      showSuccess('New chat started successfully')
+      // Clear all messages to show welcome screen
+      setMessages([])
+      setMessageCache([]) // Clear message cache for new conversation
     } catch (error) {
       console.error('Error resetting:', error)
       showError(error.message || 'Failed to start new chat')
@@ -2525,12 +2645,110 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         </div>
       )}
 
-      {/* Messages */}
+      {/* Messages or Welcome Screen */}
       <div
-        className="flex-1 overflow-y-auto scrollbar-hide p-6 space-y-6"
+        className="flex-1 overflow-y-auto scrollbar-hide p-6"
         onClick={handleChatAreaClick}
       >
-        {messages.map((message, index) => (
+        {messages.length === 0 ? (
+          /* Welcome Screen */
+          <div className="flex flex-col items-center justify-center h-full space-y-8">
+            {/* Title */}
+              <div className={`text-3xl md:text-4xl font-normal ${
+                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+              }`}>
+                {businessName ? `${businessName}'s workplace` : "atsn ai's workplace"}
+              </div>
+
+            {/* Input Box in Center */}
+            <div className="w-full max-w-lg mx-auto">
+              {/* Save Status Indicator */}
+              {saveStatus !== 'saved' && (
+                <div className={`flex items-center justify-center gap-2 text-xs mb-4 px-3 py-1 rounded-full ${
+                  saveStatus === 'saving'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                    : saveStatus === 'unsaved'
+                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                    : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                }`}>
+                  {saveStatus === 'saving' && <RefreshCw className="w-3 h-3 animate-spin" />}
+                  {saveStatus === 'unsaved' && <Clock className="w-3 h-3" />}
+                  {saveStatus === 'error' && <X className="w-3 h-3" />}
+                  <span>
+                    {saveStatus === 'saving' && 'Saving conversation...'}
+                    {saveStatus === 'unsaved' && 'Unsaved changes'}
+                    {saveStatus === 'error' && 'Save failed'}
+                  </span>
+                </div>
+              )}
+
+              <div className="relative">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Ask me to manage your content or leads..."
+                  className={`w-full px-6 pr-14 py-4 text-base rounded-[20px] backdrop-blur-sm focus:outline-none shadow-lg ${
+                    isDarkMode
+                      ? 'bg-gray-700/80 border-0 focus:ring-0 text-gray-100 placeholder-gray-400'
+                      : 'bg-white/80 border border-white/20 focus:ring-2 focus:ring-white/30 focus:border-white/50 text-gray-900 placeholder-gray-500'
+                  }`}
+                  disabled={isLoading}
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={isLoading || !inputMessage.trim()}
+                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-7 h-7 transition-all flex items-center justify-center ${
+                    isDarkMode
+                      ? 'text-green-400 hover:text-green-300 disabled:text-gray-500'
+                      : 'text-blue-600 hover:text-blue-700 disabled:text-gray-400'
+                  } disabled:cursor-not-allowed`}
+                >
+                  <Send className="w-5 h-5 transform rotate-45" />
+                </button>
+              </div>
+
+              {/* Instructions */}
+              <div className={`mt-6 text-center space-y-4 ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}>
+                <div className="text-sm font-medium">
+                  What would you like to do? Our agents are ready to work
+                </div>
+
+                {/* Agent Logos */}
+                <div className="flex justify-center items-center gap-6 mt-4">
+                  <div className="flex flex-col items-center space-y-2">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+                      <img src="/emily_icon.png" alt="Emily" className="w-10 h-10 rounded-full object-cover" />
+                    </div>
+                    <span className="text-xs font-medium">Emily</span>
+                  </div>
+
+                  <div className="flex flex-col items-center space-y-2">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shadow-lg">
+                      <img src="/leo_logo.png" alt="Leo" className="w-10 h-10 rounded-full object-cover" />
+                    </div>
+                    <span className="text-xs font-medium">Leo</span>
+                  </div>
+
+                  <div className="flex flex-col items-center space-y-2">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg">
+                      <img src="/chase_logo.png" alt="Chase" className="w-10 h-10 rounded-full object-cover" />
+                    </div>
+                    <span className="text-xs font-medium">Chase</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        ) : (
+          /* Messages */
+          <div className="space-y-6">
+            {messages.map((message, index) => (
           <div
             key={message.id}
             className={`group flex gap-3 ${message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
@@ -2646,22 +2864,33 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                     </div>
 
                     <div className="relative max-w-none leading-tight">
-                      {/* Check if message contains markdown syntax */}
-                      {message.text.includes('#') || message.text.includes('*') || message.text.includes('`') || message.text.includes('[') ? (
-                        <div className={`leading-tight pr-16 ${
-                          isDarkMode ? 'prose-invert prose prose-gray' : 'prose'
-                        }`}>
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {message.text}
-                          </ReactMarkdown>
-                        </div>
-                      ) : (
-                        <div className={`whitespace-pre-line leading-tight pr-16 ${
-                          isDarkMode ? 'text-white' : ''
-                        }`}>
-                          {message.text}
-                        </div>
-                      )}
+                      {/* Clean message text to remove stray characters */}
+                      {(() => {
+                        let displayText = message.text || '';
+                        // Remove trailing )} patterns
+                        displayText = displayText.replace(/\s*\)\s*\}\s*$/g, '').trim();
+                        // Remove any standalone )} patterns
+                        displayText = displayText.replace(/\s*\)\s*\}\s*/g, '');
+                        
+                        // Check if message contains markdown syntax
+                        const hasMarkdown = displayText.includes('#') || displayText.includes('*') || displayText.includes('`') || displayText.includes('[');
+                        
+                        return hasMarkdown ? (
+                          <div className={`leading-tight pr-16 ${
+                            isDarkMode ? 'prose-invert prose prose-gray' : 'prose'
+                          }`}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {displayText}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          <div className={`whitespace-pre-line leading-tight pr-16 ${
+                            isDarkMode ? 'text-white' : ''
+                          }`}>
+                            {displayText}
+                          </div>
+                        );
+                      })()}
                       <div className={`absolute bottom-0 right-0 text-xs ${
                         message.sender === 'user'
                           ? 'text-white'
@@ -3691,34 +3920,38 @@ const ATSNChatbot = ({ externalConversations = null }) => {
             </div>
           </div>
         ))}
-
-        <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} />
+          </div>
+        )}
       </div>
 
-      {/* Input */}
-      <div className={`p-4 border-t ${
-        isDarkMode ? 'border-gray-700' : 'border-gray-200'
-      }`}>
-        {/* New Chat Option */}
-        <div className="flex items-center justify-between mb-3">
-          <button
-            onClick={handleReset}
-            className={`flex items-center gap-2 text-sm font-medium transition-colors ${
-              isDarkMode
-                ? 'text-white hover:text-gray-200'
-                : 'text-blue-600 hover:text-blue-700'
-            }`}
-          >
-            <span className="text-lg">+</span>
-            <span>New Chat</span>
-          </button>
-          <div className={`text-xs ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+      {/* Input - Only show when there are messages */}
+        {messages.length > 0 && (
+          <div className={`p-4 border-t ${
+            isDarkMode ? 'border-gray-700' : 'border-gray-200'
           }`}>
-            Press Enter to send
-          </div>
-        </div>
-        <div className="relative">
+            {/* New Chat Option */}
+            <div className="flex items-center justify-between mb-3">
+              <button
+                onClick={handleReset}
+                className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+                  isDarkMode
+                    ? 'text-white hover:text-gray-200'
+                    : 'text-blue-600 hover:text-blue-700'
+                }`}
+              >
+                <span className="text-lg">+</span>
+                <span>New Chat</span>
+              </button>
+              <div className={`text-xs ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                Press Enter to send
+              </div>
+            </div>
+
+
+          <div className="relative">
             <input
               ref={inputRef}
               type="text"
@@ -3746,12 +3979,13 @@ const ATSNChatbot = ({ externalConversations = null }) => {
             </button>
         </div>
         
-        <div className={`mt-2 text-xs text-center ${
-          isDarkMode ? 'text-gray-400' : 'text-gray-500'
-        }`}>
-          Try: "Show scheduled posts" • "Create lead" • "View analytics"
+          <div className={`mt-2 text-xs text-center ${
+            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+          }`}>
+            Try: "Show scheduled posts" • "Create lead" • "View analytics"
+          </div>
         </div>
-      </div>
+        )}
 
       {/* ATSN Content Modal */}
       {showContentModal && selectedContentForModal && (

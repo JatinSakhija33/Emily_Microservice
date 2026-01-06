@@ -484,41 +484,41 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
 
   const getStatusConfig = (status) => {
     const configs = {
-      new: {
+      new: { 
         color: isDarkMode ? 'bg-blue-800 text-blue-300 border-blue-700' : 'bg-blue-100 text-blue-700 border-blue-200',
         bgColor: isDarkMode ? 'bg-blue-900/50' : 'bg-blue-50',
         borderColor: isDarkMode ? 'border-blue-700' : 'border-blue-200',
-        label: 'New'
+        label: 'New' 
       },
-      contacted: {
+      contacted: { 
         color: isDarkMode ? 'bg-purple-800 text-purple-300 border-purple-700' : 'bg-purple-100 text-purple-700 border-purple-200',
         bgColor: isDarkMode ? 'bg-purple-900/50' : 'bg-purple-50',
         borderColor: isDarkMode ? 'border-purple-700' : 'border-purple-200',
-        label: 'Contacted'
+        label: 'Contacted' 
       },
-      responded: {
+      responded: { 
         color: isDarkMode ? 'bg-green-800 text-green-300 border-green-700' : 'bg-green-100 text-green-700 border-green-200',
         bgColor: isDarkMode ? 'bg-green-900/50' : 'bg-green-50',
         borderColor: isDarkMode ? 'border-green-700' : 'border-green-200',
-        label: 'Responded'
+        label: 'Responded' 
       },
-      qualified: {
+      qualified: { 
         color: isDarkMode ? 'bg-orange-800 text-orange-300 border-orange-700' : 'bg-orange-100 text-orange-700 border-orange-200',
         bgColor: isDarkMode ? 'bg-orange-900/50' : 'bg-orange-50',
         borderColor: isDarkMode ? 'border-orange-700' : 'border-orange-200',
-        label: 'Qualified'
+        label: 'Qualified' 
       },
-      converted: {
+      converted: { 
         color: isDarkMode ? 'bg-emerald-800 text-emerald-300 border-emerald-700' : 'bg-emerald-100 text-emerald-700 border-emerald-200',
         bgColor: isDarkMode ? 'bg-emerald-900/50' : 'bg-emerald-50',
         borderColor: isDarkMode ? 'border-emerald-700' : 'border-emerald-200',
-        label: 'Converted'
+        label: 'Converted' 
       },
-      lost: {
+      lost: { 
         color: isDarkMode ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-200',
         bgColor: isDarkMode ? 'bg-gray-900/50' : 'bg-gray-50',
         borderColor: isDarkMode ? 'border-gray-700' : 'border-gray-200',
-        label: 'Lost'
+        label: 'Lost' 
       },
       invalid: {
         color: isDarkMode ? 'bg-red-800 text-red-300 border-red-700' : 'bg-red-100 text-red-700 border-red-200',
@@ -689,22 +689,22 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
           : 'Added remark at '
 
         timelineEntries.push({
-          type: 'remark',
-          title: 'Chase',
-          description: {
+            type: 'remark',
+            title: 'Chase',
+            description: {
             text: messageText,
-            boldPart: '',
-            textAfter: '',
-            boldTime: timeStr,
-            textEnd: '.'
-          },
-          remarks: remarks.trim(),
+              boldPart: '',
+              textAfter: '',
+              boldTime: timeStr,
+              textEnd: '.'
+            },
+            remarks: remarks.trim(),
           remarksText: remarks.trim(),
-          timestamp: history.created_at,
-          icon: Bot,
-          color: 'text-purple-600 bg-purple-50',
-          oldStatus: history.old_status,
-          newStatus: history.new_status,
+            timestamp: history.created_at,
+            icon: Bot,
+            color: 'text-purple-600 bg-purple-50',
+            oldStatus: history.old_status,
+            newStatus: history.new_status,
           isChaseMessage: true,
           isStatusChangeWithRemark: isStatusChange
         })
@@ -1070,7 +1070,7 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
                                     {event.description.textAfter}
                                     {event.description.boldMessage ? (
                                       <div className={`mt-2 p-2 ${isDarkMode ? 'bg-gray-600 border-gray-500' : 'bg-gray-50 border-gray-200'} border rounded text-xs`}>
-                                        <div
+                                        <div 
                                           className={isDarkMode ? 'text-gray-200' : 'text-gray-800'}
                                           dangerouslySetInnerHTML={{ __html: event.description.boldMessage }}
                                         />

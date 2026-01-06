@@ -133,7 +133,7 @@ async def manual_edit(
             content=request.content,
             instructions=request.instructions
         )
-
+        
         if result["success"]:
             # Increment usage after successful image editing
             await increment_usage_after_action(request.user_id, 'image')
@@ -208,7 +208,7 @@ async def save_image(
 
                 # Also update metadata JSON field if it contains image_url
                 metadata_messages = supabase.table('atsn_conversation_messages').select('id, metadata').eq('metadata->>image_url', request.original_image_url).execute()
-
+        
                 if metadata_messages.data:
                     for message in metadata_messages.data:
                         updated_metadata = message['metadata'].copy()
@@ -248,7 +248,7 @@ async def save_image(
             "post_id": request.post_id,
             "new_image_url": request.edited_image_url
         }
-
+            
     except Exception as e:
         logger.error(f"Error in save_image endpoint: {e}")
         import traceback

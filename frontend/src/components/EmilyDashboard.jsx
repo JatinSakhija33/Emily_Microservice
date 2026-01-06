@@ -46,7 +46,7 @@ import MainContentLoader from './MainContentLoader'
 import ATSNChatbot from './ATSNChatbot'
 import RecentTasks from './RecentTasks'
 import ContentCard from './ContentCard'
-import { Sparkles, TrendingUp, Target, BarChart3, FileText, PanelRight, PanelLeft, X, ChevronRight, RefreshCw, ChevronDown } from 'lucide-react'
+import { Sparkles, TrendingUp, Target, BarChart3, FileText, PanelRight, PanelLeft, X, ChevronRight, RefreshCw, ChevronDown, History } from 'lucide-react'
 
 // Voice Orb Component with animated border (spring-like animation)
 const VoiceOrb = ({ isSpeaking }) => {
@@ -186,6 +186,12 @@ function EmilyDashboard() {
   const [overdueLeadsCount, setOverdueLeadsCount] = useState(0)
   const [overdueLeadsLoading, setOverdueLeadsLoading] = useState(true)
 
+  // Conversation history and search
+  const [showHistoryDropdown, setShowHistoryDropdown] = useState(false)
+  const [conversationHistory, setConversationHistory] = useState([])
+  const [selectedConversation, setSelectedConversation] = useState(null)
+  const [historySearch, setHistorySearch] = useState('')
+
   // Listen for dark mode changes from other components (like SideNavbar)
   useStorageListener('darkMode', setIsDarkMode)
 
@@ -197,8 +203,30 @@ function EmilyDashboard() {
   }
 
   // Fetch overdue leads count
-  const fetchOverdueLeadsCount = async () => {
+  const fetchOverdueLeadsCount = async (forceRefresh = false) => {
+    if (!user) return
+
+    const CACHE_KEY = `overdue_leads_count_${user.id}`
+    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
+
     try {
+      // Check if we have cached data from today
+      if (!forceRefresh) {
+        const cachedData = localStorage.getItem(CACHE_KEY)
+        if (cachedData) {
+          const { count, timestamp } = JSON.parse(cachedData)
+          const cacheAge = Date.now() - timestamp
+
+          // Use cached data if it's less than 24 hours old
+          if (cacheAge < CACHE_EXPIRATION_MS) {
+            console.log('Using cached overdue leads count:', count)
+            setOverdueLeadsCount(count)
+            setOverdueLeadsLoading(false)
+            return
+          }
+        }
+      }
+
       setOverdueLeadsLoading(true)
       const leadsAPI = (await import('../services/leads')).leadsAPI
 
@@ -246,6 +274,13 @@ function EmilyDashboard() {
         return isOverdue
       }).length
 
+      // Cache the result with current timestamp
+      const cacheData = {
+        count: overdueCount,
+        timestamp: Date.now()
+      }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
+
       console.log('Overdue leads count:', overdueCount)
       setOverdueLeadsCount(overdueCount)
     } catch (error) {
@@ -284,15 +319,51 @@ function EmilyDashboard() {
     }
   }, [isPanelOpen, user])
 
-  // Fetch overdue leads count periodically
+  // Fetch overdue leads count periodically (cached for 24 hours)
   useEffect(() => {
     if (user) {
       fetchOverdueLeadsCount()
-      // Refresh every 5 minutes
-      const interval = setInterval(fetchOverdueLeadsCount, 5 * 60 * 1000)
+      // Refresh every 24 hours
+      const interval = setInterval(() => fetchOverdueLeadsCount(true), 24 * 60 * 60 * 1000)
       return () => clearInterval(interval)
     }
   }, [user])
+
+  // Load conversation history
+  const loadConversationHistory = async () => {
+    try {
+      const token = await getAuthToken()
+      if (!token) return
+
+      const response = await fetch(`${API_BASE_URL}/atsn/conversations?all=true&limit=50`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setConversationHistory(data.conversations || [])
+      }
+    } catch (error) {
+      console.error('Error loading conversation history:', error)
+    }
+  }
+
+  // Load a specific conversation
+  const loadConversation = (conversation) => {
+    if (conversation && conversation.messages) {
+      setSelectedConversation(conversation)
+      setShowHistoryDropdown(false)
+      setHistorySearch('')
+    }
+  }
+
+  // Load history on component mount
+  useEffect(() => {
+    loadConversationHistory()
+  }, [])
 
   // Set selectedDate to today by default, don't override with most recent conversation date
   useEffect(() => {
@@ -518,6 +589,95 @@ function EmilyDashboard() {
               </div>
               
               <div className="flex items-center gap-2">
+                {/* History Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowHistoryDropdown(!showHistoryDropdown)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors border ${
+                      isDarkMode
+                        ? 'hover:bg-gray-700 border-gray-600 text-gray-300'
+                        : 'hover:bg-gray-100 border-gray-200 text-gray-700'
+                    }`}
+                    title="Conversation History"
+                  >
+                    <History className="w-4 h-4" />
+                    <span className="text-sm font-medium hidden sm:inline">History</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showHistoryDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {showHistoryDropdown && (
+                    <div className={`absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto rounded-md shadow-lg border z-50 ${
+                      isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                    }`}>
+                      <div className={`px-4 py-2 border-b ${
+                        isDarkMode ? 'border-gray-700 text-gray-200' : 'border-gray-200 text-gray-800'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <History className="w-4 h-4" />
+                          <h3 className="text-sm font-medium">Conversation History</h3>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Search conversations..."
+                          value={historySearch}
+                          onChange={(e) => setHistorySearch(e.target.value)}
+                          className={`w-full px-3 py-1 text-sm rounded border ${
+                            isDarkMode
+                              ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400'
+                              : 'bg-white border-gray-300 text-gray-800 placeholder-gray-500'
+                          }`}
+                        />
+                      </div>
+
+                      {conversationHistory.length === 0 ? (
+                        <div className={`px-4 py-8 text-center ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                        }`}>
+                          <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No conversations yet</p>
+                        </div>
+                      ) : (
+                        <div className="py-1">
+                          {conversationHistory
+                            .filter(conv =>
+                              conv.primary_agent_name?.toLowerCase().includes(historySearch.toLowerCase()) ||
+                              conv.messages?.some(msg => msg.text?.toLowerCase().includes(historySearch.toLowerCase()))
+                            )
+                            .map((conv) => (
+                            <button
+                              key={conv.id}
+                              onClick={() => loadConversation(conv)}
+                              className={`w-full px-4 py-3 text-left hover:${
+                                isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
+                              } transition-colors border-b ${
+                                isDarkMode ? 'border-gray-700' : 'border-gray-100'
+                              } last:border-b-0`}
+                            >
+                              <div className={`text-sm font-medium ${
+                                isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                              }`}>
+                                {conv.primary_agent_name || 'ATSN'} Session
+                              </div>
+                              <div className={`text-xs mt-1 ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                              }`}>
+                                {conv.total_messages} messages • {new Date(conv.created_at).toLocaleDateString()}
+                              </div>
+                              {conv.messages && conv.messages.length > 0 && (
+                                <div className={`text-xs mt-2 line-clamp-2 ${
+                                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                }`}>
+                                  {conv.messages[conv.messages.length - 1]?.text || 'No preview available'}
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* Panel Toggle Button */}
                 <button
                   onClick={() => setIsPanelOpen(!isPanelOpen)}
@@ -550,9 +710,10 @@ function EmilyDashboard() {
             <div className="w-full h-full flex gap-2">
                 {/* Main Chat Area */}
               <div className="flex-1 h-full">
-                <div className="h-full relative pt-0.5 px-8 overflow-x-auto">
+                <div className="h-full relative pt-0.5 px-24 overflow-x-auto">
                   <ATSNChatbot
                     key="atsn-chatbot-fresh"
+                    externalConversations={selectedConversation?.messages}
                   />
                 </div>
               </div>
@@ -584,40 +745,40 @@ function EmilyDashboard() {
 
                     {/* Panel Content */}
                     <div className="flex-1 p-3 lg:p-4 overflow-y-auto">
-                      {/* Overdue Leads Count */}
-                      <div
-                        className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                          isDarkMode
-                            ? 'bg-gray-800 border-gray-600 hover:bg-gray-700'
-                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                        }`}
-                        onClick={() => navigate('/leads?filter=overdue_followups')}
-                        title="Click to view all leads"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <span className={`text-sm font-bold ${
-                            overdueLeadsLoading
-                              ? isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                              : overdueLeadsCount > 0
-                              ? 'text-yellow-600'
-                              : isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                          }`}>
-                            {overdueLeadsLoading ? '...' : overdueLeadsCount}
-                          </span>
-                          <span className={`text-sm font-medium ${
-                            isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                          }`}>
-                            : Leads to follow up
-                          </span>
+                      {/* Overdue Leads Count - Only show after loading */}
+                      {!overdueLeadsLoading && (
+                        <div
+                          className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                            isDarkMode
+                              ? 'bg-gray-800 border-gray-600 hover:bg-gray-700'
+                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                          }`}
+                          onClick={() => navigate('/leads?filter=overdue_followups')}
+                          title="Click to view all leads"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <span className={`text-sm font-bold ${
+                              overdueLeadsCount > 0
+                                ? 'text-yellow-600'
+                                : isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                            }`}>
+                              {overdueLeadsCount}
+                            </span>
+                            <span className={`text-sm font-medium ${
+                              isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                            }`}>
+                              : Leads to follow up
+                            </span>
+                          </div>
+                          {overdueLeadsCount > 0 && (
+                            <p className={`text-xs mt-1 ${
+                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                            }`}>
+                              {overdueLeadsCount === 1 ? 'Lead has' : 'Leads have'} overdue follow-ups
+                            </p>
+                          )}
                         </div>
-                        {overdueLeadsCount > 0 && (
-                          <p className={`text-xs mt-1 ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                          }`}>
-                            {overdueLeadsCount === 1 ? 'Lead has' : 'Leads have'} overdue follow-ups
-                          </p>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
                 )}

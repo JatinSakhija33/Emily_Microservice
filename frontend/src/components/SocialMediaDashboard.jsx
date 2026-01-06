@@ -561,7 +561,7 @@ const SocialMediaDashboard = () => {
                                 isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
                               }`}>
                                 {getPlatformIcon(platform)}
-                              </div>
+                                  </div>
                               {/* Platform Info */}
                               <div>
                                 <h3 className={`font-normal text-sm capitalize ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>

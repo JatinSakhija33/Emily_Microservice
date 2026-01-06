@@ -274,9 +274,9 @@ function SignUp() {
                   value={formData.email}
                   onChange={handleChange}
                   className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors bg-gray-700 text-white placeholder-gray-500 ${
-                    emailValidation.isValid === true
+                    emailValidation.isValid === true 
                       ? 'border-green-500 focus:ring-green-500'
-                      : emailValidation.isValid === false
+                      : emailValidation.isValid === false 
                       ? 'border-red-500 focus:ring-red-500'
                       : 'border-gray-600'
                   }`}
@@ -327,7 +327,7 @@ function SignUp() {
                       : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
                   }`}
                   placeholder={
-                    emailValidation.isValid === false
+                    emailValidation.isValid === false 
                       ? "Email already exists - password not needed"
                       : emailValidation.isValidating
                       ? "Checking email availability..."
@@ -397,7 +397,7 @@ function SignUp() {
                       : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
                   }`}
                   placeholder={
-                    emailValidation.isValid === false
+                    emailValidation.isValid === false 
                       ? "Email already exists - password not needed"
                       : emailValidation.isValidating
                       ? "Checking email availability..."

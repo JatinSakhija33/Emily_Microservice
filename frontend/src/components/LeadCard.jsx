@@ -250,8 +250,8 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
         </div>
       </div>
 
-        {/* Follow-up Date */}
-        {lead.follow_up_at && (
+      {/* Follow-up Date */}
+      {lead.follow_up_at && (
           <div className={`p-1.5 border-t ${isDarkMode ? 'border-gray-600/50' : 'border-white/30'}`}>
           <div className={`flex items-center space-x-1 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
             <Calendar className="w-5 h-5" />
@@ -261,8 +261,8 @@ const LeadCard = ({ lead, onClick, onDelete, isSelected = false, onSelect = null
         </div>
       )}
 
-        {/* Remarks Section */}
-        {lead.last_remark && (
+      {/* Remarks Section */}
+      {lead.last_remark && (
           <div className={`p-1.5 ${isDarkMode ? 'bg-gray-700/40' : 'bg-white/60'} border-t ${isDarkMode ? 'border-gray-600/50' : 'border-white/30'}`}>
           <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} line-clamp-2`}>
             {lead.last_remark.charAt(0).toUpperCase() + lead.last_remark.slice(1)}
