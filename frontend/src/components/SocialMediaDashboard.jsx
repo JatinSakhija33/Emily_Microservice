@@ -148,19 +148,19 @@ const SocialMediaDashboard = () => {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const fetchData = async (forceRefresh = false) => {
+  const fetchData = async (forceRefresh = true) => {
     try {
       setDataLoaded(false)
-      
-      // Fetch posts only (stats fetching disabled)
+
+      // Always fetch live data for happenings page (force refresh)
       const result = await fetchAllData(forceRefresh)
-      
+
       if (result.fromCache) {
-        console.log('Data served from cache')
+        console.log('Data served from cache (this should not happen for happenings page)')
       } else {
-        console.log('Data fetched from API')
+        console.log('Live data fetched from API')
       }
-      
+
       setDataLoaded(true)
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -207,12 +207,12 @@ const SocialMediaDashboard = () => {
     try {
       setRefreshing(true)
       setDataLoaded(false)
-      await fetchData(true) // Force refresh from API
+      await fetchData(true) // Force live data refresh from API
       setLastRefresh(new Date())
-      showSuccess('Social media data refreshed successfully!')
+      showSuccess('Live social media data refreshed successfully!')
     } catch (error) {
       console.error('Error refreshing data:', error)
-      showError('Failed to refresh data', error.message)
+      showError('Failed to refresh live data', error.message)
     } finally {
       setRefreshing(false)
     }

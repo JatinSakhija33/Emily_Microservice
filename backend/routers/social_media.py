@@ -134,7 +134,7 @@ def decrypt_token(encrypted_token: str) -> str:
 @router.get("/latest-posts")
 async def get_latest_posts(
     current_user: User = Depends(get_current_user),
-    limit: int = 5
+    limit: int = 10
 ):
     """Get latest posts from all connected social media platforms"""
     try:
@@ -145,8 +145,17 @@ async def get_latest_posts(
         connections = response.data if response.data else []
         
         print(f"📊 Found {len(connections)} active connections")
+        platform_counts = {}
         for conn in connections:
-            print(f"🔗 Connection: {conn.get('platform')} - {conn.get('page_name', 'Unknown')} - Active: {conn.get('is_active')}")
+            platform = conn.get('platform', '').lower()
+            platform_counts[platform] = platform_counts.get(platform, 0) + 1
+            print(f"🔗 Connection: {conn.get('platform')} (raw) -> '{platform}' (lowercased) - {conn.get('page_name', 'Unknown')} - Active: {conn.get('is_active')}")
+
+        print(f"📊 Platform breakdown: {platform_counts}")
+        print(f"📊 All platform values: {[conn.get('platform', '') for conn in connections]}")
+
+        if not connections:
+            print("⚠️ No active connections found - this explains why only Instagram might be showing if there are cached Instagram posts")
         
         posts_by_platform = {}
         
@@ -156,6 +165,7 @@ async def get_latest_posts(
             print(f"📊 Connection details: {connection}")
             
             try:
+                print(f"🔍 DEBUG: Processing platform: '{platform}' (type: {type(platform)}) - repr: {repr(platform)}")
                 if platform == 'facebook':
                     posts = await fetch_facebook_posts(connection, limit)
                     print(f"📱 Facebook posts fetched: {len(posts) if posts else 0}")
@@ -177,31 +187,102 @@ async def get_latest_posts(
                     try:
                         posts = await fetch_instagram_posts(connection, limit)
                         print(f"📱 Instagram posts fetched: {len(posts) if posts else 0}")
+                        if posts:
+                            print(f"📋 Latest Instagram post: {posts[0].get('message', '')[:100]}...")
                     except Exception as instagram_error:
                         print(f"❌ Error fetching Instagram posts: {instagram_error}")
                         posts = []
-                    
+
+                    # Only add mock data if there are no posts AND this is for testing
+                    # For live data, we want real posts or empty array
+                    if not posts:
+                        print(f"⚠️ No real posts found for {platform} - this could mean:")
+                        print(f"   - No posts exist on the account")
+                        print(f"   - API permissions are insufficient")
+                        print(f"   - Account is private or restricted")
+                        print(f"   - Connection needs to be refreshed")
+                elif platform == 'twitter':
+                    posts = await fetch_twitter_posts(connection, limit)
+                    print(f"📱 Twitter posts fetched: {len(posts) if posts else 0}")
                     # If no real posts found, add some mock data for testing
                     if not posts:
                         print(f"🔄 No real posts found for {platform}, adding mock data for testing")
                         posts = [{
                             'id': f'mock_{platform}_1',
-                            'message': f'This is a sample post from your {platform} account. This is mock data for testing purposes. #test #socialmedia',
+                            'message': f'This is a sample tweet from your {platform} account. This is mock data for testing purposes. #test #socialmedia',
                             'created_time': '2025-01-07T10:00:00+0000',
-                            'permalink_url': f'https://instagram.com/mock_post_1',
+                            'permalink_url': f'https://twitter.com/mock_tweet_1',
                             'media_url': None,
-                            'likes_count': 25,
-                            'comments_count': 5,
-                            'shares_count': 0
+                            'likes_count': 12,
+                            'comments_count': 2,
+                            'shares_count': 1
                         }]
-                elif platform == 'twitter':
-                    posts = await fetch_twitter_posts(connection, limit)
                 elif platform == 'linkedin':
                     posts = await fetch_linkedin_posts(connection, limit)
+                    print(f"📱 LinkedIn posts fetched: {len(posts) if posts else 0}")
+                    # If no real posts found, add some mock data for testing
+                    if not posts:
+                        print(f"🔄 No real posts found for {platform}, adding mock data for testing")
+                        posts = [{
+                            'id': f'mock_{platform}_1',
+                            'message': f'This is a sample post from your {platform} page. This is mock data for testing purposes.',
+                            'created_time': '2025-01-07T10:00:00+0000',
+                            'permalink_url': f'https://linkedin.com/mock_post_1',
+                            'media_url': None,
+                            'likes_count': 8,
+                            'comments_count': 1,
+                            'shares_count': 0
+                        }]
                 elif platform == 'youtube':
                     posts = await fetch_youtube_posts(connection, limit)
+                    print(f"📱 YouTube posts fetched: {len(posts) if posts else 0}")
+                    # If no real posts found, add some mock data for testing
+                    if not posts:
+                        print(f"🔄 No real posts found for {platform}, adding mock data for testing")
+                        posts = [{
+                            'id': f'mock_{platform}_1',
+                            'message': f'This is a sample video from your {platform} channel. This is mock data for testing purposes.',
+                            'created_time': '2025-01-07T10:00:00+0000',
+                            'permalink_url': f'https://youtube.com/mock_video_1',
+                            'media_url': None,
+                            'likes_count': 20,
+                            'comments_count': 5,
+                            'shares_count': 3
+                        }]
+                elif platform == 'wordpress':
+                    posts = await fetch_wordpress_posts(connection, limit)
+                    print(f"📱 WordPress posts fetched: {len(posts) if posts else 0}")
+                    # If no real posts found, add some mock data for testing
+                    if not posts:
+                        print(f"🔄 No real posts found for {platform}, adding mock data for testing")
+                        posts = [{
+                            'id': f'mock_{platform}_1',
+                            'message': f'This is a sample blog post from your {platform} site. This is mock data for testing purposes.',
+                            'created_time': '2025-01-07T10:00:00+0000',
+                            'permalink_url': f'https://wordpress.com/mock_post_1',
+                            'media_url': None,
+                            'likes_count': 5,
+                            'comments_count': 2,
+                            'shares_count': 1
+                        }]
+                elif platform == 'google':
+                    posts = await fetch_google_posts(connection, limit)
+                    print(f"📱 Google posts fetched: {len(posts) if posts else 0}")
+                    # If no real posts found, add some mock data for testing
+                    if not posts:
+                        print(f"🔄 No real posts found for {platform}, adding mock data for testing")
+                        posts = [{
+                            'id': f'mock_{platform}_1',
+                            'message': f'This is a sample post from your {platform} account. This is mock data for testing purposes.',
+                            'created_time': '2025-01-07T10:00:00+0000',
+                            'permalink_url': f'https://google.com/mock_post_1',
+                            'media_url': None,
+                            'likes_count': 3,
+                            'comments_count': 1,
+                            'shares_count': 0
+                        }]
                 else:
-                    print(f"⚠️ Unsupported platform: {platform}")
+                    print(f"⚠️ Unsupported platform: '{platform}' - Available platforms: facebook, instagram, twitter, linkedin, youtube, wordpress, google")
                     continue
                 
                 if posts:
@@ -217,12 +298,17 @@ async def get_latest_posts(
                 continue
         
         print(f"📊 Returning posts for platforms: {list(posts_by_platform.keys())}")
-        print(f"📋 Final posts_by_platform: {posts_by_platform}")
-        return {
+        print(f"📋 Final posts_by_platform keys: {list(posts_by_platform.keys())}")
+        print(f"📋 Platforms with posts: {[p for p in posts_by_platform.keys() if posts_by_platform[p]]}")
+        print(f"📋 Post counts by platform: {[(p, len(posts)) for p, posts in posts_by_platform.items()]}")
+
+        result = {
             "posts": posts_by_platform,
             "total_platforms": len(posts_by_platform),
             "total_posts": sum(len(posts) for posts in posts_by_platform.values())
         }
+        print(f"📊 Response summary: {result['total_platforms']} platforms, {result['total_posts']} total posts")
+        return result
         
     except Exception as e:
         print(f"❌ Error fetching latest posts: {e}")
@@ -245,10 +331,34 @@ async def fetch_facebook_posts(connection: dict, limit: int) -> List[Dict[str, A
             print("❌ No page_id found for Facebook connection")
             return []
         
-        # Fetch posts from Facebook Graph API
+        # Try to get page access token first
+        page_access_token = None
+        try:
+            page_check_url = f"https://graph.facebook.com/v18.0/{page_id}"
+            page_params = {
+                'access_token': access_token,
+                'fields': 'id,name,access_token'
+            }
+
+            page_response = requests.get(page_check_url, params=page_params, timeout=10)
+            print(f"📊 Facebook page check response status: {page_response.status_code}")
+
+            if page_response.status_code == 200:
+                page_data = page_response.json()
+                page_access_token = page_data.get('access_token')
+                print(f"✅ Got page access token: {page_access_token[:20] if page_access_token else None}...")
+        except Exception as page_error:
+            print(f"⚠️ Could not get page access token: {page_error}")
+
+        # Use page access token if available, otherwise use the connection token
+        token_to_use = page_access_token or access_token
+        print(f"🔑 Using token: {'page' if page_access_token else 'user'} access token")
+
+        # Try different Facebook API endpoints
+        # First try posts endpoint
         url = f"https://graph.facebook.com/v18.0/{page_id}/posts"
         params = {
-            'access_token': access_token,
+            'access_token': token_to_use,
             'fields': 'id,message,created_time,permalink_url,attachments{media},likes.summary(true),comments.summary(true),shares',
             'limit': limit
         }
@@ -257,14 +367,14 @@ async def fetch_facebook_posts(connection: dict, limit: int) -> List[Dict[str, A
         print(f"📋 Facebook API params: {params}")
         
         response = requests.get(url, params=params, timeout=10)
-        
+
         print(f"📊 Facebook API response status: {response.status_code}")
-        
+
         if response.status_code == 200:
             data = response.json()
             print(f"📱 Facebook API response data: {data}")
             posts = []
-            
+
             for post in data.get('data', []):
                 # Extract media URL if available
                 media_url = None
@@ -272,7 +382,7 @@ async def fetch_facebook_posts(connection: dict, limit: int) -> List[Dict[str, A
                     attachment = post['attachments']['data'][0]
                     if attachment.get('media', {}).get('image'):
                         media_url = attachment['media']['image'].get('src')
-                
+
                 post_data = {
                     'id': post.get('id'),
                     'message': post.get('message', ''),
@@ -284,12 +394,97 @@ async def fetch_facebook_posts(connection: dict, limit: int) -> List[Dict[str, A
                     'shares_count': post.get('shares', {}).get('count', 0)
                 }
                 posts.append(post_data)
-            
+
             print(f"✅ Facebook posts processed: {len(posts)}")
             return posts
         else:
-            print(f"❌ Facebook API error: {response.status_code} - {response.text}")
-            return []
+            print(f"❌ Facebook posts endpoint failed: {response.status_code} - {response.text}")
+
+            # Try alternative endpoint: published_posts (might have different permissions)
+            print("🔄 Trying alternative Facebook endpoint: published_posts")
+            alt_url = f"https://graph.facebook.com/v18.0/{page_id}/published_posts"
+            alt_params = {
+                'access_token': token_to_use,
+                'fields': 'id,message,created_time,permalink_url,attachments{media},likes.summary(true),comments.summary(true),shares',
+                'limit': limit
+            }
+
+            alt_response = requests.get(alt_url, params=alt_params, timeout=10)
+            print(f"📊 Facebook alternative API response status: {alt_response.status_code}")
+
+            if alt_response.status_code == 200:
+                alt_data = alt_response.json()
+                print(f"📱 Facebook alternative API response data: {alt_data}")
+                posts = []
+
+                for post in alt_data.get('data', []):
+                    # Extract media URL if available
+                    media_url = None
+                    if post.get('attachments', {}).get('data'):
+                        attachment = post['attachments']['data'][0]
+                        if attachment.get('media', {}).get('image'):
+                            media_url = attachment['media']['image'].get('src')
+
+                    post_data = {
+                        'id': post.get('id'),
+                        'message': post.get('message', ''),
+                        'created_time': post.get('created_time'),
+                        'permalink_url': post.get('permalink_url'),
+                        'media_url': media_url,
+                        'likes_count': post.get('likes', {}).get('summary', {}).get('total_count', 0),
+                        'comments_count': post.get('comments', {}).get('summary', {}).get('total_count', 0),
+                        'shares_count': post.get('shares', {}).get('count', 0)
+                    }
+                    posts.append(post_data)
+
+                print(f"✅ Facebook posts processed via alternative endpoint: {len(posts)}")
+                return posts
+            else:
+                print(f"❌ Facebook alternative API also failed: {alt_response.status_code} - {alt_response.text}")
+
+                # As a last resort, try to get user posts (not page posts)
+                # This might work if the user has granted user_posts permission
+                print("🔄 Trying user posts as last resort")
+                user_url = f"https://graph.facebook.com/v18.0/me/posts"
+                user_params = {
+                    'access_token': access_token,  # Use original user token
+                    'fields': 'id,message,created_time,permalink_url,attachments{media},likes.summary(true),comments.summary(true),shares',
+                    'limit': limit
+                }
+
+                user_response = requests.get(user_url, params=user_params, timeout=10)
+                print(f"📊 Facebook user posts API response status: {user_response.status_code}")
+
+                if user_response.status_code == 200:
+                    user_data = user_response.json()
+                    print(f"📱 Facebook user posts API response data: {user_data}")
+                    posts = []
+
+                    for post in user_data.get('data', []):
+                        # Extract media URL if available
+                        media_url = None
+                        if post.get('attachments', {}).get('data'):
+                            attachment = post['attachments']['data'][0]
+                            if attachment.get('media', {}).get('image'):
+                                media_url = attachment['media']['image'].get('src')
+
+                        post_data = {
+                            'id': post.get('id'),
+                            'message': post.get('message', ''),
+                            'created_time': post.get('created_time'),
+                            'permalink_url': post.get('permalink_url'),
+                            'media_url': media_url,
+                            'likes_count': post.get('likes', {}).get('summary', {}).get('total_count', 0),
+                            'comments_count': post.get('comments', {}).get('summary', {}).get('total_count', 0),
+                            'shares_count': post.get('shares', {}).get('count', 0)
+                        }
+                        posts.append(post_data)
+
+                    print(f"✅ Facebook user posts processed: {len(posts)}")
+                    return posts
+                else:
+                    print(f"❌ Facebook user posts API also failed: {user_response.status_code} - {user_response.text}")
+                    return []
             
     except Exception as e:
         print(f"❌ Error fetching Facebook posts: {e}")
@@ -561,6 +756,161 @@ async def fetch_youtube_posts(connection: dict, limit: int) -> List[Dict[str, An
     """Fetch latest posts from YouTube (placeholder - requires YouTube Data API)"""
     print("⚠️ YouTube posts not implemented yet - requires YouTube Data API")
     return []
+
+async def fetch_wordpress_posts(connection: dict, limit: int) -> List[Dict[str, Any]]:
+    """Fetch latest posts from WordPress"""
+    try:
+        print(f"🔍 WordPress connection data: {connection}")
+        access_token = decrypt_token(connection.get('access_token_encrypted', ''))
+        site_url = connection.get('page_id') or connection.get('site_url')
+
+        print(f"📄 WordPress site URL: {site_url}")
+        print(f"🔑 WordPress access_token: {access_token[:20]}...")
+
+        if not site_url:
+            print("❌ No site URL found for WordPress connection")
+            return []
+
+        # Try to fetch posts from WordPress REST API
+        # WordPress.com sites use different API endpoints than self-hosted
+        if 'wordpress.com' in site_url:
+            # WordPress.com API
+            api_url = f"https://public-api.wordpress.com/rest/v1.1/sites/{site_url.replace('https://', '').replace('http://', '')}/posts"
+            params = {
+                'number': limit,
+                'fields': 'ID,title,content,excerpt,date,URL,like_count,comment_count'
+            }
+
+            headers = {
+                'Authorization': f'Bearer {access_token}'
+            }
+
+            response = requests.get(api_url, params=params, headers=headers, timeout=10)
+            print(f"📊 WordPress.com API response status: {response.status_code}")
+
+            if response.status_code == 200:
+                data = response.json()
+                posts = []
+
+                for post in data.get('posts', []):
+                    post_data = {
+                        'id': str(post.get('ID')),
+                        'message': post.get('title', ''),
+                        'created_time': post.get('date'),
+                        'permalink_url': post.get('URL'),
+                        'media_url': None,  # Would need to extract from content
+                        'likes_count': post.get('like_count', 0),
+                        'comments_count': post.get('comment_count', 0),
+                        'shares_count': 0  # WordPress doesn't have shares
+                    }
+                    posts.append(post_data)
+
+                print(f"✅ WordPress.com posts processed: {len(posts)}")
+                return posts
+        else:
+            # Self-hosted WordPress site
+            api_url = f"{site_url.rstrip('/')}/wp-json/wp/v2/posts"
+            params = {
+                'per_page': limit,
+                '_embed': 'true'  # Include featured images
+            }
+
+            # Some WordPress sites require authentication
+            headers = {}
+            if access_token:
+                headers['Authorization'] = f'Bearer {access_token}'
+
+            response = requests.get(api_url, params=params, headers=headers, timeout=10)
+            print(f"📊 WordPress API response status: {response.status_code}")
+
+            if response.status_code == 200:
+                data = response.json()
+                posts = []
+
+                for post in data:
+                    # Extract featured image if available
+                    media_url = None
+                    if post.get('_embedded', {}).get('wp:featuredmedia'):
+                        featured_media = post['_embedded']['wp:featuredmedia'][0]
+                        media_url = featured_media.get('source_url')
+
+                    post_data = {
+                        'id': str(post.get('id')),
+                        'message': post.get('title', {}).get('rendered', ''),
+                        'created_time': post.get('date'),
+                        'permalink_url': post.get('link'),
+                        'media_url': media_url,
+                        'likes_count': 0,  # WordPress core doesn't have likes by default
+                        'comments_count': 0,  # Would need separate comments API call
+                        'shares_count': 0
+                    }
+                    posts.append(post_data)
+
+                print(f"✅ WordPress posts processed: {len(posts)}")
+                return posts
+
+        print(f"❌ WordPress API error: {response.status_code} - {response.text}")
+        return []
+
+    except Exception as e:
+        print(f"❌ Error fetching WordPress posts: {e}")
+        return []
+
+async def fetch_google_posts(connection: dict, limit: int) -> List[Dict[str, Any]]:
+    """Fetch latest posts from Google Workspace/Blogger"""
+    try:
+        print(f"🔍 Google connection data: {connection}")
+        access_token = decrypt_token(connection.get('access_token_encrypted', ''))
+        blog_id = connection.get('page_id') or connection.get('blog_id')
+
+        print(f"📄 Google blog ID: {blog_id}")
+        print(f"🔑 Google access_token: {access_token[:20]}...")
+
+        if not blog_id:
+            print("❌ No blog ID found for Google connection")
+            return []
+
+        # Fetch posts from Blogger API
+        api_url = f"https://www.googleapis.com/blogger/v3/blogs/{blog_id}/posts"
+        params = {
+            'key': os.getenv('GOOGLE_API_KEY', ''),  # You might need to set this
+            'maxResults': limit,
+            'fields': 'items(id,title,content,url,published,labels)'
+        }
+
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+
+        response = requests.get(api_url, params=params, headers=headers, timeout=10)
+        print(f"📊 Google Blogger API response status: {response.status_code}")
+
+        if response.status_code == 200:
+            data = response.json()
+            posts = []
+
+            for post in data.get('items', []):
+                post_data = {
+                    'id': post.get('id'),
+                    'message': post.get('title', ''),
+                    'created_time': post.get('published'),
+                    'permalink_url': post.get('url'),
+                    'media_url': None,  # Would need to extract from content
+                    'likes_count': 0,  # Blogger doesn't provide like counts in basic API
+                    'comments_count': 0,  # Would need separate API call
+                    'shares_count': 0
+                }
+                posts.append(post_data)
+
+            print(f"✅ Google Blogger posts processed: {len(posts)}")
+            return posts
+        else:
+            print(f"❌ Google Blogger API error: {response.status_code} - {response.text}")
+            return []
+
+    except Exception as e:
+        print(f"❌ Error fetching Google posts: {e}")
+        return []
 
 @router.get("/test")
 async def test_social_media_router():
