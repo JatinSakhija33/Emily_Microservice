@@ -2749,41 +2749,65 @@ const ATSNChatbot = ({ externalConversations = null }) => {
           }}
         >
           <div
-            className="bg-white rounded-lg p-6 max-w-md w-full mx-4"
+            className={`rounded-lg p-6 max-w-md w-full mx-4 ${
+              isDarkMode ? 'bg-gray-800' : 'bg-white'
+            }`}
           >
-            <h3 className="text-xl font-semibold mb-4">Schedule Content</h3>
+            <h3 className={`text-xl font-semibold mb-4 ${
+              isDarkMode ? 'text-gray-100' : 'text-gray-900'
+            }`}>Schedule Content</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-base font-medium text-gray-700 mb-1">Date</label>
+                <label className={`block text-base font-medium mb-1 ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                }`}>Date</label>
                 <input
                   type="date"
                   value={scheduleData.date}
                   onChange={(e) => setScheduleData(prev => ({ ...prev, date: e.target.value }))}
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                    isDarkMode
+                      ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-purple-400'
+                      : 'border-gray-300 text-gray-900'
+                  }`}
                 />
               </div>
               <div>
-                <label className="block text-base font-medium text-gray-700 mb-1">Time</label>
+                <label className={`block text-base font-medium mb-1 ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                }`}>Time</label>
                 <input
                   type="time"
                   value={scheduleData.time}
                   onChange={(e) => setScheduleData(prev => ({ ...prev, time: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                    isDarkMode
+                      ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-purple-400'
+                      : 'border-gray-300 text-gray-900'
+                  }`}
                 />
               </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setShowScheduleModal(false)}
-                className="flex-1 px-4 py-2 text-base bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
+                className={`flex-1 px-4 py-2 text-base rounded-md transition-colors ${
+                  isDarkMode
+                    ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                    : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                }`}
               >
                 Cancel
               </button>
               <button
                 onClick={handleScheduleConfirm}
                 disabled={isScheduling || !scheduleData.date || !scheduleData.time}
-                className="flex-1 px-4 py-2 text-base bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                className={`flex-1 px-4 py-2 text-base rounded-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors ${
+                  isDarkMode
+                    ? 'bg-purple-600 text-white hover:bg-purple-700 focus:ring-purple-400'
+                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                }`}
               >
                 {isScheduling ? (
                   <>
@@ -3186,50 +3210,6 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                         contentType={contentItem.content_type}
                                         intent={message.intent}
                                         onClick={() => handleContentClick(contentItem)}
-                                        onEdit={() => {
-                                          // Process the content item the same way as for modal opening
-                                          const processedContent = {
-                                            id: contentItem.content_id,
-                                            title: contentItem.title_display || contentItem.title,
-                                            content: contentItem.content_text || contentItem.content_preview,
-                                            hashtags: contentItem.hashtags_display ?
-                                              contentItem.hashtags_display.split(' ').filter(tag => tag.startsWith('#')).map(tag => tag.substring(1)) :
-                                              (contentItem.hashtags ?
-                                                (Array.isArray(contentItem.hashtags) ? contentItem.hashtags : []) :
-                                                (contentItem.raw_data?.hashtags ?
-                                                  (Array.isArray(contentItem.raw_data.hashtags) ? contentItem.raw_data.hashtags : []) :
-                                                  [])),
-                                            media_url: contentItem.media_url,
-                                            images: contentItem.images || [],
-                                            metadata: contentItem.metadata || {},
-                                            post_type: contentItem.raw_data?.post_type,
-                                            content_type: contentItem.content_type,
-                                            selected_content_type: contentItem.raw_data?.selected_content_type,
-                                            carousel_images: contentItem.raw_data?.carousel_images || contentItem.raw_data?.images,
-                                            // Add additional fields for different content types
-                                            email_subject: contentItem.email_subject,
-                                            email_body: contentItem.email_body,
-                                            short_video_script: contentItem.short_video_script,
-                                            long_video_script: contentItem.long_video_script,
-                                            message: contentItem.message,
-                                            platform: contentItem.platform
-                                          };
-
-                                          // Check if it's a reel/video and open appropriate modal
-                                          setSelectedContentForModal(processedContent);
-                                          if (processedContent.content_type === 'short_video or reel' ||
-                                              processedContent.content_type === 'reel' ||
-                                              processedContent.content_type?.toLowerCase().includes('reel') ||
-                                              processedContent.content_type?.toLowerCase().includes('video') ||
-                                              contentItem.raw_data?.content_type === 'short_video or reel' ||
-                                              contentItem.raw_data?.content_type === 'reel' ||
-                                              contentItem.raw_data?.content_type?.toLowerCase().includes('reel') ||
-                                              contentItem.raw_data?.content_type?.toLowerCase().includes('video')) {
-                                            setShowReelModal(true);
-                                          } else {
-                                            setShowContentModal(true);
-                                          }
-                                        }}
                                         isDarkMode={isDarkMode}
                                       />
                                     ) : (
@@ -3283,50 +3263,6 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                           // Open content preview modal
                                           setSelectedContentForModal(content);
                                           setShowContentModal(true);
-                                        }}
-                                        onEdit={() => {
-                                          // Process the content item the same way as for modal opening
-                                          const processedContent = {
-                                            id: contentItem.content_id,
-                                            title: contentItem.title_display || contentItem.title,
-                                            content: contentItem.content_text || contentItem.content_preview,
-                                            hashtags: contentItem.hashtags_display ?
-                                              contentItem.hashtags_display.split(' ').filter(tag => tag.startsWith('#')).map(tag => tag.substring(1)) :
-                                              (contentItem.hashtags ?
-                                                (Array.isArray(contentItem.hashtags) ? contentItem.hashtags : []) :
-                                                (contentItem.raw_data?.hashtags ?
-                                                  (Array.isArray(contentItem.raw_data.hashtags) ? contentItem.raw_data.hashtags : []) :
-                                                  [])),
-                                            media_url: contentItem.media_url,
-                                            images: contentItem.images || [],
-                                            metadata: contentItem.metadata || {},
-                                            post_type: contentItem.raw_data?.post_type,
-                                            content_type: contentItem.content_type,
-                                            selected_content_type: contentItem.raw_data?.selected_content_type,
-                                            carousel_images: contentItem.raw_data?.carousel_images || contentItem.raw_data?.images,
-                                            // Add additional fields for different content types
-                                            email_subject: contentItem.email_subject,
-                                            email_body: contentItem.email_body,
-                                            short_video_script: contentItem.short_video_script,
-                                            long_video_script: contentItem.long_video_script,
-                                            message: contentItem.message,
-                                            platform: contentItem.platform
-                                          };
-
-                                          // Check if it's a reel/video and open appropriate modal
-                                          setSelectedContentForModal(processedContent);
-                                          if (processedContent.content_type === 'short_video or reel' ||
-                                              processedContent.content_type === 'reel' ||
-                                              processedContent.content_type?.toLowerCase().includes('reel') ||
-                                              processedContent.content_type?.toLowerCase().includes('video') ||
-                                              contentItem.raw_data?.content_type === 'short_video or reel' ||
-                                              contentItem.raw_data?.content_type === 'reel' ||
-                                              contentItem.raw_data?.content_type?.toLowerCase().includes('reel') ||
-                                              contentItem.raw_data?.content_type?.toLowerCase().includes('video')) {
-                                            setShowReelModal(true);
-                                          } else {
-                                            setShowContentModal(true);
-                                          }
                                         }}
                                       />
                                     )}
