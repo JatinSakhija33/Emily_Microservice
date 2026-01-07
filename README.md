@@ -2,6 +2,8 @@
 
 Emily is an AI-powered digital marketing agent built with modern web technologies. This repository contains the complete implementation of Emily, including frontend, backend, and database schemas.
 
+*Last updated: January 2026*
+
 ## 🚀 Tech Stack
 
 - **Frontend**: React + Vite + Tailwind CSS (deployed on Vercel)
