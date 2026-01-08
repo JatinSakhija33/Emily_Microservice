@@ -180,7 +180,7 @@ function CreatedContentDashboard() {
         return
       }
 
-      const response = await fetch(`${API_BASE_URL}/content/created?limit=100&offset=0`, {
+      const response = await fetch(`${API_BASE_URL}/content/created?limit=20&offset=0`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`

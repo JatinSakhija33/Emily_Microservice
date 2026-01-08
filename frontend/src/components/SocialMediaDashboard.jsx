@@ -211,16 +211,16 @@ const SocialMediaDashboard = () => {
   const fetchData = async (forceRefresh = true) => {
     try {
       setDataLoaded(false)
-
+      
       // Always fetch live data for happenings page (force refresh)
       const result = await fetchAllData(forceRefresh)
-
+      
       if (result.fromCache) {
         console.log('Data served from cache (this should not happen for happenings page)')
       } else {
         console.log('Live data fetched from API')
       }
-
+      
       setDataLoaded(true)
     } catch (error) {
       console.error('Error fetching data:', error)

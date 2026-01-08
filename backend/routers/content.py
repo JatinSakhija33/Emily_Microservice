@@ -1145,28 +1145,39 @@ async def get_post_contents(
     limit: int = Query(50, gt=0, le=200),
     offset: int = Query(0, ge=0),
     platform: Optional[str] = None,
-    status: Optional[str] = None,
+    post_status: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Get post contents from post_contents table"""
+    """Get post contents from post_contents table filtered by user's business_id"""
     try:
-        # Build query
-        query = supabase_admin.table("post_contents").select("*")
+        # Use current user's ID as business_id
+        business_id = current_user.id
+        logger.info(f"Fetching post_contents for business_id: {business_id}")
+        
+        # Build query with business_id filter
+        query = supabase_admin.table("post_contents").select("*").eq("business_id", business_id)
 
-        # Add filters
+        # Add additional filters
         if platform:
             query = query.eq("platform", platform)
-        if status:
-            query = query.eq("status", status)
+        if post_status:
+            query = query.eq("status", post_status)
 
         # Apply pagination and ordering
         query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
 
         response = query.execute()
 
-        # Check if response has data (Supabase doesn't use .error attribute like this)
+        # Check if response has data
         if not response.data:
-            logger.warning("No data returned from post_contents query")
+            logger.warning(f"No data returned from post_contents query for business_id: {business_id}")
+
+        logger.info(f"Found {len(response.data or [])} post_contents for business_id: {business_id}")
+        
+        # Log first item for debugging
+        if response.data and len(response.data) > 0:
+            first_item = response.data[0]
+            logger.info(f"Sample post_content: id={first_item.get('id')}, platform={first_item.get('platform')}, has_images={bool(first_item.get('generated_images'))}, images_type={type(first_item.get('generated_images'))}")
 
         return {
             "success": True,

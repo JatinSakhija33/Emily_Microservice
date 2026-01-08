@@ -250,6 +250,42 @@ class ContentAPI {
     }
   }
 
+  // Get post contents from post_contents table
+  async getPostContents(limit = 50, offset = 0, platform = null, status = null) {
+    try {
+      const authToken = await this.getAuthToken()
+      console.log('Fetching post contents with token:', authToken ? 'present' : 'missing')
+      
+      let url = buildApiUrl(`/content/post-contents?limit=${limit}&offset=${offset}`)
+      if (platform) url += `&platform=${platform}`
+      if (status) url += `&post_status=${status}`
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      })
+
+      console.log('Post contents response status:', response.status)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Post contents API error:', errorText)
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      console.log('Post contents data:', result)
+      
+      return { data: result.data || [], count: result.count, error: null }
+    } catch (error) {
+      console.error('Error fetching post contents:', error)
+      return { data: null, error: error.message }
+    }
+  }
+
   // Helper method to get auth token
   async getAuthToken() {
     const { data: { session } } = await supabase.auth.getSession()

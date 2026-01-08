@@ -5,6 +5,7 @@ import { contentAPI } from '../services/content'
 import { onboardingAPI } from '../services/onboarding'
 import SideNavbar from './SideNavbar'
 import MobileNavigation from './MobileNavigation'
+import PostContentCard from './PostContentCard'
 import { Facebook, Instagram, Linkedin, Youtube, Building2, Hash, FileText, Video, X } from 'lucide-react'
 
 // Dark mode hook
@@ -93,6 +94,24 @@ const PostSuggestionsDashboard = () => {
 
   // Filter states
   const [postsFilter, setPostsFilter] = useState('all')
+  
+  // Active tab state
+  const [activeTab, setActiveTab] = useState('posts') // 'posts', 'blogs', 'videos'
+
+  // Cache management helpers
+  const getCacheKey = (type) => `suggested_${type}_${user?.id}_${new Date().toISOString().split('T')[0]}`
+  const shouldRefreshCache = (type) => {
+    const cacheKey = getCacheKey(type)
+    const lastRefresh = localStorage.getItem(`${cacheKey}_timestamp`)
+    if (!lastRefresh) return true
+
+    const lastRefreshDate = new Date(parseInt(lastRefresh))
+    const now = new Date()
+    const timeDiff = now.getTime() - lastRefreshDate.getTime()
+    const hoursDiff = timeDiff / (1000 * 3600)
+
+    return hoursDiff >= 24 // Refresh every 24 hours
+  }
 
   // Fetch profile data
   const fetchProfile = async () => {
@@ -137,15 +156,32 @@ const PostSuggestionsDashboard = () => {
   console.log('User:', user)
   console.log('Profile:', profile)
 
-  // Fetch suggested posts from post_contents table
+  // Fetch suggested posts from post_contents table with caching
   const fetchSuggestedPosts = async () => {
     try {
+      const cacheKey = getCacheKey('posts')
+
+      // Check if we should refresh cache
+      if (!shouldRefreshCache('posts')) {
+        const cachedPosts = localStorage.getItem(cacheKey)
+        if (cachedPosts) {
+          console.log('Loading suggested posts from cache')
+          setSuggestedPosts(JSON.parse(cachedPosts))
+          return
+        }
+      }
+
       const result = await contentAPI.getPostContents(50, 0)
 
       if (result.error) throw new Error(result.error)
 
       const posts = result.data || []
       console.log('Fetched post contents data:', posts.slice(0, 3)) // Log first 3 posts to see structure
+
+      // Cache the posts
+      localStorage.setItem(cacheKey, JSON.stringify(posts))
+      localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString())
+
       setSuggestedPosts(posts)
     } catch (error) {
       console.error('Error fetching suggested posts:', error)
@@ -153,9 +189,21 @@ const PostSuggestionsDashboard = () => {
     }
   }
 
-  // Fetch suggested blogs using the same API, then filter for Blog channel
+  // Fetch suggested blogs using the same API, then filter for Blog channel with caching
   const fetchSuggestedBlogs = async () => {
     try {
+      const cacheKey = getCacheKey('blogs')
+
+      // Check if we should refresh cache
+      if (!shouldRefreshCache('blogs')) {
+        const cachedBlogs = localStorage.getItem(cacheKey)
+        if (cachedBlogs) {
+          console.log('Loading suggested blogs from cache')
+          setSuggestedBlogs(JSON.parse(cachedBlogs))
+          return
+        }
+      }
+
       const result = await contentAPI.getAllContent(50, 0)
 
       if (result.error) throw new Error(result.error)
@@ -163,22 +211,51 @@ const PostSuggestionsDashboard = () => {
       // Filter for Blog channel content
       const blogs = (result.data || []).filter(content =>
         content.channel?.toLowerCase() === 'blog'
-      )
+      ).slice(0, 10)
 
-      setSuggestedBlogs(blogs.slice(0, 10))
+      // Cache the blogs
+      localStorage.setItem(cacheKey, JSON.stringify(blogs))
+      localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString())
+
+      setSuggestedBlogs(blogs)
     } catch (error) {
       console.error('Error fetching suggested blogs:', error)
       showError('Failed to load suggested blogs')
     }
   }
 
-  // Fetch suggested videos (placeholder)
+  // Fetch suggested videos using the same API, then filter for Video channel with caching
   const fetchSuggestedVideos = async () => {
     try {
-      // Placeholder - to be implemented
-      setSuggestedVideos([])
+      const cacheKey = getCacheKey('videos')
+
+      // Check if we should refresh cache
+      if (!shouldRefreshCache('videos')) {
+        const cachedVideos = localStorage.getItem(cacheKey)
+        if (cachedVideos) {
+          console.log('Loading suggested videos from cache')
+          setSuggestedVideos(JSON.parse(cachedVideos))
+          return
+        }
+      }
+
+      const result = await contentAPI.getAllContent(50, 0)
+
+      if (result.error) throw new Error(result.error)
+
+      // Filter for Video channel content
+      const videos = (result.data || []).filter(content =>
+        content.channel?.toLowerCase() === 'video'
+      ).slice(0, 10)
+
+      // Cache the videos
+      localStorage.setItem(cacheKey, JSON.stringify(videos))
+      localStorage.setItem(`${cacheKey}_timestamp`, Date.now().toString())
+
+      setSuggestedVideos(videos)
     } catch (error) {
       console.error('Error fetching suggested videos:', error)
+      showError('Failed to load suggested videos')
     }
   }
 
@@ -325,7 +402,7 @@ const PostSuggestionsDashboard = () => {
     return (
       <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} flex items-center justify-center`}>
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">Not Authenticated</h1>
+          <h1 className="text-2xl font-normal text-red-600 mb-4">Not Authenticated</h1>
           <p className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>Please log in to access the dashboard.</p>
         </div>
       </div>
@@ -348,15 +425,90 @@ const PostSuggestionsDashboard = () => {
       <SideNavbar />
 
       {/* Main Content */}
-      <div className={`md:ml-48 xl:ml-64 p-4 lg:p-6 overflow-y-auto custom-scrollbar ${
-        isDarkMode ? 'dark-mode' : 'light-mode'
+      <div className={`md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden pt-16 md:pt-0 ${
+        isDarkMode ? 'md:bg-gray-900' : 'md:bg-white'
       }`}>
+        {/* Header */}
+        <div className={`hidden md:block shadow-sm border-b z-30 flex-shrink-0 ${
+          isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+        }`}>
+          <div className="px-4 lg:px-6 py-3 lg:py-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                {/* Tab Navigation */}
+                <div className="flex items-center gap-2">
+                  {/* Posts Tab */}
+                  <button
+                    onClick={() => setActiveTab('posts')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all font-normal ${
+                      activeTab === 'posts'
+                        ? isDarkMode
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
+                        : isDarkMode
+                        ? 'text-gray-300 hover:bg-gray-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Hash className="w-4 h-4" />
+                    <span>Posts</span>
+                  </button>
+
+                  {/* Blogs Tab */}
+                  <button
+                    onClick={() => setActiveTab('blogs')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all font-normal ${
+                      activeTab === 'blogs'
+                        ? isDarkMode
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
+                        : isDarkMode
+                        ? 'text-gray-300 hover:bg-gray-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>Blogs</span>
+                  </button>
+
+                  {/* Videos Tab */}
+                  <button
+                    onClick={() => setActiveTab('videos')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all font-normal ${
+                      activeTab === 'videos'
+                        ? isDarkMode
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
+                        : isDarkMode
+                        ? 'text-gray-300 hover:bg-gray-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Video className="w-4 h-4" />
+                    <span>Videos</span>
+                  </button>
+                </div>
+              </div>
+              
+              {/* Right side - Business Name */}
+              <div className={`text-sm lg:text-base font-normal ${
+                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+              }`}>
+                {profile?.business_name || user?.user_metadata?.name || 'Suggested Content'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-6">
         <div className="space-y-8">
 
           {/* Section 1: Suggested Posts */}
+          {activeTab === 'posts' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Suggested Posts</h2>
+              <h2 className={`text-2xl font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Suggested Posts</h2>
             </div>
 
             {/* Platform Filter Buttons */}
@@ -407,94 +559,14 @@ const PostSuggestionsDashboard = () => {
             >
                 <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
                   {getFilteredPosts().length > 0 ? (
-                    getFilteredPosts().map((post) => {
-                      const contentPlatform = post.platform?.toLowerCase().trim() || ''
-                      const normalizedPlatform = contentPlatform === 'twitter' ? 'x' : contentPlatform
-
-                      return (
-                        <div
-                          key={post.id}
-                          className={`flex-shrink-0 w-80 rounded-xl shadow-md border p-4 hover:shadow-lg transition-shadow cursor-pointer ${
-                            isDarkMode
-                              ? 'bg-gray-800 border-gray-700 shadow-gray-900/50 hover:shadow-gray-900/70'
-                              : 'bg-white border-gray-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-3">
-                            {getPlatformIcon(normalizedPlatform, false)}
-                            <span className={`text-sm font-medium capitalize ${
-                              isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                            }`}>
-                              {normalizedPlatform}
-                            </span>
-                            <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(post.status)} ${
-                              isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-                            }`}>
-                              {post.status || 'Generated'}
-                            </span>
-                          </div>
-
-                          {/* Generated Image */}
-                          {post.generated_image_url && (
-                                <img
-                              src={post.generated_image_url}
-                              alt="Generated post image"
-                                  className="w-full aspect-square object-cover rounded-lg mb-3"
-                                  onError={(e) => {
-                                    console.log('Post image failed to load:', e.target.src, 'for post:', post.id)
-                                    e.target.style.display = 'none'
-                                  }}
-                                />
-                              )}
-
-                          {/* Topic */}
-                          {post.topic && (
-                              <h3 className={`font-semibold mb-2 line-clamp-2 ${
-                                isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                              }`}>
-                              {post.topic}
-                              </h3>
-                          )}
-
-                          {/* Generated Caption */}
-                          {post.generated_caption && (
-                              <p className={`text-sm line-clamp-3 mb-3 ${
-                                isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                              }`}>
-                              {post.generated_caption}
-                            </p>
-                          )}
-
-                          {/* Image Prompt */}
-                          {post.image_prompt && (
-                            <div className={`text-xs mb-2 p-2 rounded ${
-                              isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-blue-50 text-blue-700'
-                            }`}>
-                              <strong>Image:</strong> {post.image_prompt}
-                            </div>
-                          )}
-
-                          {/* Post Date/Time */}
-                          {(post.post_date || post.post_time) && (
-                            <div className={`text-xs mb-2 ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                            }`}>
-                              {post.post_date && <span>📅 {new Date(post.post_date).toLocaleDateString()}</span>}
-                              {post.post_time && <span className="ml-2">🕒 {post.post_time}</span>}
-                            </div>
-                          )}
-
-                          <div className={`flex items-center justify-between text-xs ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                          }`}>
-                            <span>{new Date(post.created_at).toLocaleDateString()}</span>
-                            <button className="text-purple-600 hover:text-purple-700 font-medium">
-                              View Details →
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })
+                    getFilteredPosts().map((post) => (
+                      <PostContentCard
+                        key={post.id}
+                        post={post}
+                        isDarkMode={isDarkMode}
+                        onCopy={handleCopyMessage}
+                      />
+                    ))
                   ) : (
                     <div className={`flex items-center justify-center py-8 ${
                       isDarkMode ? 'text-gray-400' : 'text-gray-500'
@@ -505,10 +577,12 @@ const PostSuggestionsDashboard = () => {
                 </div>
               </div>
           </div>
+          )}
 
           {/* Section 2: Suggested Blogs */}
+          {activeTab === 'blogs' && (
           <div className="space-y-4">
-            <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Suggested Blogs</h2>
+            <h2 className={`text-2xl font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Suggested Blogs</h2>
 
             <div
               className="overflow-x-auto pb-4 scrollbar-transparent"
@@ -540,7 +614,7 @@ const PostSuggestionsDashboard = () => {
                           </span>
                         </div>
 
-                              <h3 className={`font-semibold mb-2 line-clamp-2 ${
+                              <h3 className={`font-normal mb-2 line-clamp-2 ${
                                 isDarkMode ? 'text-gray-100' : 'text-gray-900'
                               }`}>
                                 {blog.title || 'Untitled Blog'}
@@ -572,10 +646,12 @@ const PostSuggestionsDashboard = () => {
                 </div>
               </div>
           </div>
+          )}
 
           {/* Section 3: Suggested Videos */}
+          {activeTab === 'videos' && (
           <div className="space-y-4">
-            <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Suggested Videos</h2>
+            <h2 className={`text-2xl font-normal ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Suggested Videos</h2>
 
             <div
               className="overflow-x-auto pb-4 scrollbar-transparent"
@@ -607,7 +683,7 @@ const PostSuggestionsDashboard = () => {
                           </span>
                         </div>
 
-                        <h3 className={`font-semibold mb-2 line-clamp-2 ${
+                        <h3 className={`font-normal mb-2 line-clamp-2 ${
                     isDarkMode ? 'text-gray-100' : 'text-gray-900'
                         }`}>
                           {video.title || 'Untitled Video'}
@@ -639,6 +715,8 @@ const PostSuggestionsDashboard = () => {
                 </div>
               </div>
           </div>
+          )}
+        </div>
         </div>
       </div>
     </div>

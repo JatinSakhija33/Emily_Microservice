@@ -248,9 +248,9 @@ function AppContent() {
             </ProtectedRoute>
           } 
         />
-        <Route
-          path="/onboarding"
-          element={<Onboarding />}
+        <Route 
+          path="/onboarding" 
+          element={<Onboarding />} 
         />
         <Route
           path="/edit-profile"

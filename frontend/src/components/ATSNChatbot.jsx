@@ -3628,11 +3628,12 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                     {message.lead_items && message.lead_items.length > 0 && (
                       <div className="mt-4">
                         {/* Filter Controls */}
-                        <div className={`rounded-xl shadow-lg border p-4 mb-4 ${
-                          isDarkMode
-                            ? 'bg-gray-800 border-gray-700 shadow-gray-900/50'
-                            : 'bg-amber-50 border-amber-200'
-                        }`}>
+                        <div className="w-full mb-4" style={{ transform: 'scale(0.8)', transformOrigin: 'top left' }}>
+                          <div className={`rounded-xl shadow-lg border p-4 ${
+                            isDarkMode
+                              ? 'bg-gray-800 border-gray-700 shadow-gray-900/50'
+                              : 'bg-amber-50 border-amber-200'
+                          }`}>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                             {/* Search Filter */}
                             <div>
@@ -3646,7 +3647,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                 placeholder="Name or email..."
                                 value={leadFilters.search}
                                 onChange={(e) => setLeadFilters(prev => ({ ...prev, search: e.target.value }))}
-                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-sm ${
+                                className={`w-[90%] px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-sm ${
                                   isDarkMode
                                     ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500 placeholder-gray-400'
                                     : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
@@ -3769,6 +3770,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                             </button>
                           </div>
                         </div>
+                        </div>
 
                         <div className={`rounded-xl shadow-lg border overflow-hidden ${
                           isDarkMode
@@ -3828,15 +3830,15 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                   </span>
                                 </div>
 
-                                <div className="overflow-x-auto max-w-[90%]">
-                                  <table className="w-full min-w-[600px]">
+                                <div className="w-full overflow-x-auto">
+                                  <table className="w-full table-fixed">
                                     <thead className={`border-b ${
                                       isDarkMode
                                         ? 'bg-gray-700 border-gray-600'
                                         : 'bg-green-100 border-green-200'
                                     }`}>
                                       <tr>
-                                        <th className="px-2 md:px-4 py-3 text-left">
+                                        <th className="w-8 px-1 py-3 text-left">
                                           {(message.intent === 'view_leads' || message.intent === 'delete_leads') && (
                                             <button
                                               onClick={() => {
@@ -3850,43 +3852,23 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                               }`}
                                               title="Select All Filtered"
                                             >
-                                              <CheckSquare className="w-3 h-3 md:w-4 md:h-4" />
+                                              <CheckSquare className="w-3 h-3" />
                                             </button>
                                           )}
                                         </th>
-                                        <th className={`px-2 md:px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
-                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                        }`}>
+                                        <th className="w-1/3 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider truncate">
                                           Lead Name
                                         </th>
-                                        <th className={`hidden sm:table-cell px-2 md:px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
-                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                        }`}>
-                                          Email
-                                        </th>
-                                        <th className={`hidden md:table-cell px-2 md:px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
-                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                        }`}>
-                                          Phone
-                                        </th>
-                                        <th className={`px-2 md:px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
-                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                        }`}>
+                                        <th className="w-20 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider truncate">
                                           Status
                                         </th>
-                                        <th className={`hidden lg:table-cell px-2 md:px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
-                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                        }`}>
+                                        <th className="w-24 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider truncate">
                                           Source
                                         </th>
-                                        <th className={`hidden xl:table-cell px-2 md:px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
-                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                        }`}>
+                                        <th className="w-28 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider truncate">
                                           Latest Remark
                                         </th>
-                                        <th className={`hidden xl:table-cell px-2 md:px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
-                                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                        }`}>
+                                        <th className="w-24 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider truncate">
                                           Created
                                         </th>
                                       </tr>
@@ -3898,11 +3880,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                         <tr key={`${message.id}-${index}`} className={`transition-colors ${
                                           isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-amber-50'
                                         }`}>
-                                          <td className="px-2 md:px-4 py-3">
+                                          <td className="w-8 px-1 py-3">
                                             {(message.intent === 'view_leads' || message.intent === 'delete_leads') && (
                                               <button
                                                 onClick={() => handleLeadSelect(leadItem.lead_id || leadItem.id, message.intent)}
-                                                className={`w-4 h-4 md:w-5 md:h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                                className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
                                                   selectedLeads.includes(leadItem.lead_id || leadItem.id)
                                                     ? 'bg-green-600 border-green-600 text-white'
                                                     : isDarkMode
@@ -3911,37 +3893,30 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                                 }`}
                                               >
                                                 {selectedLeads.includes(leadItem.lead_id || leadItem.id) ? (
-                                                  <CheckSquare className="w-2.5 h-2.5 md:w-3 md:h-3" />
+                                                  <CheckSquare className="w-2.5 h-2.5" />
                                                 ) : (
-                                                  <Square className="w-2.5 h-2.5 md:w-3 md:h-3" />
+                                                  <Square className="w-2.5 h-2.5" />
                                                 )}
                                               </button>
                                             )}
                                           </td>
-                                          <td className="px-2 md:px-4 py-3">
-                                            <div className="flex items-center gap-2 md:gap-3">
-                                              <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                                                <User className="w-2.5 h-2.5 md:w-3 md:h-3 text-white" />
+                                          <td className="w-1/3 px-2 py-3">
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                                <User className="w-2.5 h-2.5 text-white" />
                                               </div>
-                                              <span className={`font-medium truncate text-sm md:text-base ${
-                                                isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                                              }`}>
+                                              <span
+                                                className={`font-medium truncate text-sm cursor-help ${
+                                                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                                                }`}
+                                                title={`Email: ${leadItem.email || 'N/A'}\nPhone: ${leadItem.phone || 'N/A'}`}
+                                              >
                                                 {leadItem.name || 'Unknown Lead'}
                                               </span>
                                             </div>
                                           </td>
-                                          <td className={`hidden sm:table-cell px-2 md:px-4 py-3 text-sm truncate max-w-xs ${
-                                            isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                          }`}>
-                                            {leadItem.email || 'No email'}
-                                          </td>
-                                          <td className={`hidden md:table-cell px-2 md:px-4 py-3 text-sm ${
-                                            isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                          }`}>
-                                            {leadItem.phone || 'No phone'}
-                                          </td>
-                                          <td className="px-2 md:px-4 py-3">
-                                            <span className={`px-1.5 md:px-2 py-0.5 md:py-1 rounded-full text-xs font-medium ${
+                                          <td className="w-20 px-2 py-3">
+                                            <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium truncate ${
                                               leadItem.status === 'new' ? 'bg-blue-100 text-blue-800' :
                                               leadItem.status === 'contacted' ? 'bg-purple-100 text-purple-800' :
                                               leadItem.status === 'responded' ? 'bg-green-100 text-green-800' :
@@ -3954,19 +3929,13 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                               {leadItem.status ? leadItem.status.charAt(0).toUpperCase() + leadItem.status.slice(1) : 'Unknown'}
                                             </span>
                                           </td>
-                                          <td className={`hidden lg:table-cell px-2 md:px-4 py-3 text-sm ${
-                                            isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                          }`}>
+                                          <td className="w-24 px-2 py-3 text-sm truncate">
                                             {leadItem.source || leadItem.source_platform || 'Unknown'}
                                           </td>
-                                          <td className={`hidden xl:table-cell px-2 md:px-4 py-3 text-sm max-w-xs truncate ${
-                                            isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                          }`} title={leadItem.last_remark}>
+                                          <td className="w-28 px-2 py-3 text-sm truncate" title={leadItem.last_remark}>
                                             {leadItem.last_remark || 'No remarks'}
                                           </td>
-                                          <td className={`hidden xl:table-cell px-2 md:px-4 py-3 text-sm ${
-                                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                                          }`}>
+                                          <td className="w-24 px-2 py-3 text-sm truncate">
                                             {leadItem.created_at || 'Unknown'}
                                           </td>
                                         </tr>
