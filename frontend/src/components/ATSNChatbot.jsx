@@ -3909,7 +3909,15 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                                 className={`font-medium truncate text-sm cursor-help ${
                                                   isDarkMode ? 'text-gray-100' : 'text-gray-900'
                                                 }`}
-                                                title={`Email: ${leadItem.email || 'N/A'}\nPhone: ${leadItem.phone || 'N/A'}`}
+                                                title=""
+                                                onMouseEnter={(e) => {
+                                                  // Show loading state first
+                                                  e.target.title = "Loading...";
+                                                  // Simulate loading delay, then show actual data
+                                                  setTimeout(() => {
+                                                    e.target.title = `Email: ${leadItem.email || 'N/A'}\nPhone: ${leadItem.phone || 'N/A'}`;
+                                                  }, 300);
+                                                }}
                                               >
                                                 {leadItem.name || 'Unknown Lead'}
                                               </span>
