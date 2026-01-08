@@ -194,9 +194,9 @@ async def chat(
         if intent:
             if 'lead' in intent.lower():
                 agent_name = 'chase'
-            elif intent.lower() in ['view_content', 'publish_content', 'delete_content']:
+            elif intent.lower() in ['view_content', 'publish_content', 'delete_content','schedule_content']:
                 agent_name = 'emily'
-            elif intent.lower() in ['create_content', 'edit_content', 'schedule_content']:
+            elif intent.lower() in ['create_content', 'edit_content','created_content']:
                 agent_name = 'leo'
             elif 'orio' in intent.lower() or 'analytics' in intent.lower():
                 agent_name = 'orio'

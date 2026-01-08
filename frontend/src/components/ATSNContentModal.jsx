@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Hash, Edit, Check, X as XIcon, Sparkles, RefreshCw, Copy } from 'lucide-react'
+import { X, Hash, Edit, Check, X as XIcon, Sparkles, RefreshCw, Copy, ChevronLeft, ChevronRight, Layers } from 'lucide-react'
 import { Instagram, Facebook, MessageCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -70,6 +70,7 @@ const ATSNContentModal = ({
   const [showAIResult, setShowAIResult] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference)
+  const [carouselIndex, setCarouselIndex] = useState(0)
   const fileInputRef = useRef(null)
 
   // Listen for dark mode changes from other components
@@ -112,6 +113,40 @@ const ATSNContentModal = ({
       fetchProfileData()
     }
   }, [content])
+
+  useEffect(() => {
+    setCarouselIndex(0)
+  }, [content?.id, content?.carousel_images?.length])
+
+  const normalizeImages = (rawImages) => {
+    if (!rawImages) return []
+    if (!Array.isArray(rawImages)) return []
+    return rawImages
+      .map((img) => {
+        if (!img) return null
+        if (typeof img === 'string') return img
+        if (typeof img === 'object') return img.url || img.image_url || img.path || null
+        return null
+      })
+      .filter(Boolean)
+  }
+
+  const carouselImages = normalizeImages(
+    content?.carousel_images ||
+    content?.metadata?.carousel_images ||
+    content?.images
+  )
+  const hasCarouselImages = carouselImages.length > 0
+
+  const prevCarouselImage = () => {
+    if (!hasCarouselImages) return
+    setCarouselIndex((prev) => (prev - 1 + carouselImages.length) % carouselImages.length)
+  }
+
+  const nextCarouselImage = () => {
+    if (!hasCarouselImages) return
+    setCarouselIndex((prev) => (prev + 1) % carouselImages.length)
+  }
 
   // Edit handlers
   const handleEdit = () => {
@@ -658,7 +693,85 @@ const ATSNContentModal = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 min-h-[400px]">
             {/* Left Column - Image (like posts) */}
             <div className="space-y-4 -mx-2">
-              {content.images && content.images.length > 0 ? (
+              {hasCarouselImages ? (
+                <div className="relative group">
+                  <div className="overflow-hidden rounded-3xl bg-gray-900 aspect-square">
+                    <div
+                      className="flex h-full transition-transform duration-300 ease-in-out"
+                      style={{ transform: `translateX(-${carouselIndex * 100}%)` }}
+                    >
+                      {carouselImages.map((img, index) => (
+                        <div key={index} className="min-w-full h-full flex-shrink-0">
+                          <img
+                            src={img}
+                            alt={`Carousel image ${index + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none'
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Navigation Arrows */}
+                  {carouselImages.length > 1 && (
+                    <>
+                      <button
+                        onClick={prevCarouselImage}
+                        className="absolute left-1 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-opacity opacity-0 group-hover:opacity-100"
+                        title="Previous carousel image"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={nextCarouselImage}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-opacity opacity-0 group-hover:opacity-100"
+                        title="Next carousel image"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+
+                  {/* Indicator Dots */}
+                  {carouselImages.length > 1 && (
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-2">
+                      {carouselImages.map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setCarouselIndex(index)
+                          }}
+                          className={`rounded-full transition-all duration-300 ${
+                            index === carouselIndex
+                              ? 'bg-white w-8 h-2'
+                              : 'bg-white/60 w-2 h-2'
+                          }`}
+                          title={`Image ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Edit Image Button */}
+                  <button
+                    onClick={() => handleImageEdit(carouselImages[carouselIndex])}
+                    className={`absolute top-3 right-6 p-2 rounded-lg shadow-lg transition-all duration-200 ${
+                      isDarkMode
+                        ? 'bg-gray-900/90 hover:bg-gray-800 text-white hover:text-gray-200'
+                        : 'bg-black/60 hover:bg-black/80 text-white hover:text-gray-200'
+                    }`}
+                    title="Edit carousel image with AI"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                </div>
+              ) : content.images && content.images.length > 0 ? (
                 <div className="flex justify-center relative group">
                   <img
                     src={content.images[0]}
@@ -696,31 +809,6 @@ const ATSNContentModal = ({
                   {/* Edit Image Button */}
                   <button
                     onClick={() => handleImageEdit(content.media_url)}
-                    className={`absolute top-3 right-6 p-2 rounded-lg shadow-lg transition-all duration-200 ${
-                      isDarkMode
-                        ? 'bg-gray-900/90 hover:bg-gray-800 text-white hover:text-gray-200'
-                        : 'bg-black/60 hover:bg-black/80 text-white hover:text-gray-200'
-                    }`}
-                    title="Edit image with AI"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
-                </div>
-              ) : content.images && content.images.length > 0 ? (
-                <div className="flex justify-center relative group">
-                  <img
-                    src={content.images[0]}
-                    alt={content.title || "Video thumbnail"}
-                    className="w-full max-h-[32rem] object-contain rounded-lg shadow-lg"
-                    onError={(e) => {
-                      e.target.style.display = 'none'
-                    }}
-                  />
-                  {/* Edit Image Button */}
-                  <button
-                    onClick={() => handleImageEdit(content.images[0])}
                     className={`absolute top-3 right-6 p-2 rounded-lg shadow-lg transition-all duration-200 ${
                       isDarkMode
                         ? 'bg-gray-900/90 hover:bg-gray-800 text-white hover:text-gray-200'

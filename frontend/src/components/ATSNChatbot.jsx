@@ -131,6 +131,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const [likedMessages, setLikedMessages] = useState(new Set())
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const MAX_INPUT_HEIGHT = 96 // Approx height for three text lines
   const lastExternalConversationsRef = useRef(null)
   const hasScrolledToBottomRef = useRef(false)
 
@@ -1022,12 +1023,33 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     }
   }
 
+  const adjustInputHeight = (target) => {
+    if (!target) return
+    target.style.height = 'auto'
+    const newHeight = Math.min(target.scrollHeight, MAX_INPUT_HEIGHT)
+    target.style.height = `${newHeight}px`
+    target.style.overflowY = target.scrollHeight > MAX_INPUT_HEIGHT ? 'auto' : 'hidden'
+  }
+
+  const resetInputHeight = () => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'
+      inputRef.current.style.overflowY = 'hidden'
+    }
+  }
+
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSendMessage()
     }
   }
+
+  useEffect(() => {
+    if (!inputMessage) {
+      resetInputHeight()
+    }
+  }, [inputMessage])
 
   // Content selection functions
   const handleContentSelect = (contentId, intent) => {
@@ -3304,6 +3326,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                                         platform={contentItem.platform}
                                         contentType={contentItem.content_type}
                                         minimal={message.intent !== 'created_content'}
+                                        isDarkMode={isDarkMode}
                                         onCopy={() => {
                                           let textToCopy = '';
 
@@ -4174,19 +4197,23 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
 
           <div className="relative">
-            <input
+            <textarea
               ref={inputRef}
-              type="text"
+              rows={1}
               value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
+              onChange={(e) => {
+                setInputMessage(e.target.value)
+                adjustInputHeight(e.target)
+              }}
               onKeyPress={handleKeyPress}
               placeholder="Ask me to manage your content or leads..."
-              className={`w-full px-6 pr-14 py-4 text-base rounded-[10px] backdrop-blur-sm focus:outline-none shadow-lg ${
+              className={`w-full px-6 pr-14 py-4 text-base rounded-[10px] backdrop-blur-sm focus:outline-none shadow-lg resize-none transition-[height] overflow-hidden ${
                 isDarkMode
                   ? 'bg-gray-700/80 border-0 focus:ring-0 text-gray-100 placeholder-gray-400'
                   : 'bg-white/80 border border-white/20 focus:ring-2 focus:ring-white/30 focus:border-white/50 text-gray-900 placeholder-gray-500'
               }`}
               disabled={isLoading}
+              style={{ maxHeight: `${MAX_INPUT_HEIGHT}px`, overflowY: 'auto' }}
             />
             <button
               onClick={handleSendMessage}

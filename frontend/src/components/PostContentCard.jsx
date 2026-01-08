@@ -101,15 +101,53 @@ const PostContentCard = ({ post, isDarkMode, onCopy }) => {
     }
   }
 
+  const getPlatformGradient = (platformName) => {
+    switch (platformName?.toLowerCase()) {
+      case 'instagram':
+        return 'from-pink-500 to-purple-600'
+      case 'facebook':
+        return 'from-blue-600 to-blue-800'
+      case 'twitter':
+      case 'x':
+        return 'from-sky-400 to-sky-600'
+      case 'linkedin':
+        return 'from-blue-700 to-blue-900'
+      case 'tiktok':
+        return 'from-black to-gray-800'
+      case 'youtube':
+        return 'from-red-500 to-orange-500'
+      default:
+        return 'from-gray-500 to-gray-700'
+    }
+  }
+
+  const statusLabel = post.status || 'Generated'
+
   return (
     <div
-      className={`flex-shrink-0 w-80 rounded-xl shadow-lg border overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:scale-[1.02] ${
-        isDarkMode
-          ? 'bg-gray-800 border-gray-700 shadow-gray-900/50'
-          : 'bg-white border-gray-200'
+      className={`flex-shrink-0 w-80 rounded-xl shadow-2xl border overflow-hidden transition-all duration-300 transform hover:scale-[1.02] ${
+        isDarkMode ? 'bg-gray-900 border-gray-800 shadow-black/30' : 'bg-white border-gray-200'
       }`}
     >
-      {/* Image Section with Carousel */}
+      <div
+        className={`flex items-center justify-between px-4 py-3 gap-3 ${
+          isDarkMode
+            ? 'bg-gray-900/70 border-b border-gray-800 text-white'
+            : `bg-gradient-to-r ${getPlatformGradient(post.platform)} text-white`
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          {getPlatformIcon()}
+          <div className="text-sm leading-tight">
+            <div className="font-semibold text-sm capitalize">{post.platform || 'Platform'}</div>
+            <div className="text-[11px] uppercase tracking-wide">{post.post_type || 'Carousel'}</div>
+          </div>
+        </div>
+        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${getStatusColor(statusLabel)}`}>
+          {statusLabel}
+        </span>
+      </div>
+
       {images.length > 0 && (
         <div className="relative group">
           <img
@@ -118,38 +156,35 @@ const PostContentCard = ({ post, isDarkMode, onCopy }) => {
             className="w-full aspect-square object-cover"
             onError={(e) => {
               console.error('Image failed to load:', e.target.src, 'for post:', post.id)
-              // Show a placeholder instead of hiding
-              e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"%3E%3Crect fill="%23ddd" width="400" height="400"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="30" dy="10.5" font-weight="bold" x="50%25" y="50%25" text-anchor="middle"%3ENo Image%3C/text%3E%3C/svg%3E'
-              e.target.onerror = null // Prevent infinite loop
+              e.target.src =
+                'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"%3E%3Crect fill="%23ddd" width="400" height="400"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-weight="bold" font-size="30" x="50%" y="50%" text-anchor="middle"%3ENo Image%3C/text%3E%3C/svg%3E'
+              e.target.onerror = null
             }}
           />
-          
-          {/* Image Counter Badge */}
+
           {hasMultipleImages && (
-            <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-white px-2 py-1 rounded-full text-xs font-medium">
+            <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded-full text-xs font-medium">
               {currentImageIndex + 1} / {images.length}
             </div>
           )}
 
-          {/* Navigation Arrows */}
           {hasMultipleImages && (
             <>
               <button
                 onClick={prevImage}
-                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
               >
-                <ChevronLeft className="w-5 h-5" />
+                <ChevronLeft className="w-4 h-4" />
               </button>
               <button
                 onClick={nextImage}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
               >
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight className="w-4 h-4" />
               </button>
             </>
           )}
 
-          {/* Image Dots Indicator */}
           {hasMultipleImages && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
               {images.map((_, index) => (
@@ -157,9 +192,7 @@ const PostContentCard = ({ post, isDarkMode, onCopy }) => {
                   key={index}
                   onClick={() => setCurrentImageIndex(index)}
                   className={`w-2 h-2 rounded-full transition-all ${
-                    index === currentImageIndex
-                      ? 'bg-white w-6'
-                      : 'bg-white/50 hover:bg-white/75'
+                    index === currentImageIndex ? 'bg-white w-6' : 'bg-white/50 hover:bg-white/75'
                   }`}
                 />
               ))}
@@ -168,69 +201,62 @@ const PostContentCard = ({ post, isDarkMode, onCopy }) => {
         </div>
       )}
 
-      {/* Content Section */}
-      <div className="p-4">
-        {/* Platform Badge & Status */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            {getPlatformIcon()}
-            <span className={`text-sm font-medium capitalize ${
-              isDarkMode ? 'text-gray-200' : 'text-gray-700'
-            }`}>
-              {post.platform}
-            </span>
-          </div>
-          <span className={`text-xs px-2 py-1 rounded-full border ${getStatusColor(post.status)}`}>
-            {post.status || 'Generated'}
-          </span>
+      {/* Title below image */}
+      {post.title && (
+        <div className="px-4">
+          <h3 className={`text-lg font-semibold leading-tight ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            {post.title}
+          </h3>
         </div>
+      )}
 
-        {/* Generated Caption */}
+      <div className="p-4 space-y-3">
         {post.generated_caption && (
-          <p className={`text-sm line-clamp-4 mb-3 leading-relaxed ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-600'
-          }`}>
+          <p className={`text-sm leading-relaxed line-clamp-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
             {post.generated_caption}
           </p>
         )}
 
-        {/* Metadata */}
-        <div className="flex items-center justify-between pt-3 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}">
-          {/* Date */}
-          <div className={`flex items-center gap-1 text-xs ${
-            isDarkMode ? 'text-gray-400' : 'text-gray-500'
-          }`}>
-            <Calendar className="w-3.5 h-3.5" />
-            <span>{new Date(post.created_at).toLocaleDateString()}</span>
-          </div>
+        {post.hashtags && post.hashtags.length > 0 && (
+          <p className={`text-sm ${isDarkMode ? 'text-blue-300' : 'text-blue-600'}`}>
+            {post.hashtags.slice(0, 8).map((tag, index) => (
+              <span key={index}>
+                {tag.startsWith('#') ? tag : `#${tag}`}
+                {index < Math.min(post.hashtags.length, 8) - 1 ? ' ' : ''}
+              </span>
+            ))}
+            {post.hashtags.length > 8 && (
+              <span className="text-gray-500">+{post.hashtags.length - 8} more</span>
+            )}
+          </p>
+        )}
 
-          {/* Actions */}
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <div className="flex items-center gap-1">
+            <Calendar className="w-3.5 h-3.5" />
+            <span>{post.created_at ? new Date(post.created_at).toLocaleDateString() : 'Today'}</span>
+          </div>
           <div className="flex items-center gap-2">
-            {/* Copy Caption Button */}
             {post.generated_caption && (
               <button
                 onClick={() => onCopy && onCopy(post.generated_caption)}
                 className={`p-1.5 rounded-lg transition-colors ${
-                  isDarkMode
-                    ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200'
-                    : 'hover:bg-gray-100 text-gray-600 hover:text-gray-900'
+                  isDarkMode ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100 text-gray-600'
                 }`}
                 title="Copy caption"
               >
                 <Copy className="w-4 h-4" />
               </button>
             )}
-
-            {/* View Details Button */}
             <button
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
                 isDarkMode
                   ? 'bg-purple-600 hover:bg-purple-700 text-white'
                   : 'bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white'
               }`}
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>View</span>
+              View
             </button>
           </div>
         </div>

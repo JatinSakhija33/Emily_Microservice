@@ -247,6 +247,373 @@ else:
     logger.info(" Supabase client initialized successfully")
 
 
+# ==================== CAROUSEL FUNCTIONS ====================
+
+def generate_carousel_image_prompts(content_idea: str, num_images: int, business_context: dict, profile_assets: dict) -> dict:
+    """
+    Generate complete carousel plan including title, caption, and all image prompts.
+
+    Args:
+        content_idea: The main content idea/topic
+        num_images: Number of images to generate prompts for
+        business_context: Business profile and context
+        profile_assets: Brand assets like colors, logo
+
+    Returns:
+        dict: {
+            "title": str,
+            "caption": str,
+            "number_of_images_in_carousel": int,
+            "image_prompt_1": str,
+            "image_prompt_2": str,
+            ...
+        }
+    """
+    try:
+        logger.info(f"🎨 Generating carousel plan with {num_images} images for: {content_idea}")
+
+        # Determine optimal number of carousel images (3-6 is ideal)
+        optimal_images = max(3, min(6, num_images))
+        if num_images != optimal_images:
+            logger.info(f"🔧 Adjusting carousel images from {num_images} to {optimal_images} for optimal UX")
+            num_images = optimal_images
+
+        # Generate title using OpenAI
+        title_prompt = f"""Create a compelling, click-worthy title for a {num_images}-image Instagram carousel about: {content_idea}
+
+Business: {business_context.get('business_name', 'Business')}
+Industry: {business_context.get('industry', 'General')}
+
+Return ONLY the title text, nothing else. Make it engaging and optimized for Instagram carousel."""
+
+        if openai_client:
+            title_response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": title_prompt}],
+                max_tokens=50,
+                temperature=0.7
+            )
+            title = title_response.choices[0].message.content.strip().strip('"\'')
+        else:
+            title = f"Carousel: {content_idea[:50]}"
+
+        # Generate caption using OpenAI
+        caption_prompt = f"""Write an engaging Instagram caption for a {num_images}-image carousel about: {content_idea}
+
+Business: {business_context.get('business_name', 'Business')}
+Target Audience: {business_context.get('target_audience', 'General audience')}
+Brand Voice: {business_context.get('brand_voice', 'Professional and friendly')}
+
+The caption should:
+- Hook the reader in the first line
+- Tell a story across the {num_images} images
+- Include relevant hashtags
+- End with a call-to-action
+- Be optimized for Instagram engagement
+
+Return ONLY the caption text, nothing else."""
+
+        if openai_client:
+            caption_response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": caption_prompt}],
+                max_tokens=200,
+                temperature=0.7
+            )
+            caption = caption_response.choices[0].message.content.strip()
+        else:
+            caption = f"Check out this {num_images}-image carousel about {content_idea}! #carousel #content"
+
+        # Initialize carousel plan
+        carousel_plan = {
+            "title": title,
+            "caption": caption,
+            "number_of_images_in_carousel": num_images
+        }
+
+        # Base context for all image prompts
+        business_info = f"""
+Business: {business_context.get('business_name', 'Business')}
+Industry: {business_context.get('industry', 'General')}
+Target Audience: {business_context.get('target_audience', 'General audience')}
+Brand Voice: {business_context.get('brand_voice', 'Professional and friendly')}
+Content Topic: {content_idea}
+"""
+
+        brand_colors = profile_assets.get('brand_colors', [])
+        color_info = f"Brand Colors: {', '.join(brand_colors) if brand_colors else 'Modern, professional colors'}"
+
+        # Generate image prompts
+        for i in range(num_images):
+            position = i + 1
+            is_first = position == 1
+            is_last = position == num_images
+
+            # Contextual guidance based on position
+            if is_first:
+                position_context = "FIRST IMAGE - Hook/Introduction"
+                visual_guidance = "Eye-catching, attention-grabbing design. Strong visual hierarchy. Clear value proposition."
+                transition_guidance = f"Lead into the next {num_images-1} images in the sequence."
+            elif is_last:
+                position_context = f"FINAL IMAGE - Call-to-Action/Conclusion (Image {position}/{num_images})"
+                visual_guidance = "Compelling conclusion with clear next steps. Strong CTA design."
+                transition_guidance = "Wrap up the carousel story effectively."
+            else:
+                position_context = f"MIDDLE IMAGE - Development/Detail (Image {position}/{num_images})"
+                visual_guidance = "Build on previous images while setting up the next one."
+                transition_guidance = f"Connect to previous image and lead toward the final {num_images-position} images."
+
+            prompt = f"""Create a professional carousel image for {business_info}
+
+{position_context}
+
+VISUAL REQUIREMENTS:
+- Style: Modern, clean, mobile-optimized design
+- {color_info}
+- High contrast, readable text
+- Professional typography
+- Visual consistency with carousel sequence
+
+CONTENT GUIDANCE:
+{visual_guidance}
+{transition_guidance}
+
+TECHNICAL SPECS:
+- Aspect ratio: 1:1 (Instagram carousel optimized)
+- Layout: Clean, uncluttered, focused on key message
+- Elements: Text overlays, simple graphics, brand elements
+
+Make this image part of a cohesive {num_images}-image carousel story."""
+
+            carousel_plan[f"image_prompt_{position}"] = prompt
+            logger.info(f"📝 Generated prompt {position}/{num_images} for carousel image")
+
+        logger.info(f"✅ Generated complete carousel plan with {num_images} images, title, and caption")
+        return carousel_plan
+
+    except Exception as e:
+        logger.error(f"❌ Error generating carousel plan: {str(e)}")
+        # Fallback to basic plan
+        return {
+            "title": f"Carousel: {content_idea[:50]}",
+            "caption": f"Check out this carousel about {content_idea}!",
+            "number_of_images_in_carousel": min(3, num_images),
+            "image_prompt_1": f"Professional image 1 for {content_idea}",
+            "image_prompt_2": f"Professional image 2 for {content_idea}",
+            "image_prompt_3": f"Professional image 3 for {content_idea}"
+        }
+
+
+async def generate_carousel_images(carousel_plan: dict, business_context: dict, profile_assets: dict) -> list[str]:
+    """
+    Generate all carousel images from the complete plan.
+
+    Args:
+        carousel_plan: JSON with title, caption, num_images, and image_prompts
+        business_context: Business profile and context
+        profile_assets: Brand assets
+
+    Returns:
+        list[str]: List of Supabase image URLs
+    """
+    try:
+        num_images = carousel_plan["number_of_images_in_carousel"]
+        logger.info(f"🎨 Starting carousel image generation for {num_images} images")
+
+        image_urls = []
+        previous_image_url = None
+
+        for i in range(num_images):
+            prompt_key = f"image_prompt_{i+1}"
+            if prompt_key not in carousel_plan:
+                logger.warning(f"⚠️ Missing prompt for image {i+1}")
+                continue
+
+            prompt = carousel_plan[prompt_key]
+            logger.info(f"🖼️ Generating carousel image {i+1}/{num_images}")
+
+            # Enhance prompt with previous image context if available
+            enhanced_prompt = prompt
+            if previous_image_url and i > 0:
+                enhanced_prompt += f"\n\nVISUAL REFERENCE: Maintain visual consistency with the previous image in this carousel sequence. Match color scheme, style, and branding."
+
+            # Generate image using Gemini image model
+            try:
+                gemini_image_model = 'gemini-2.5-flash-image-preview'
+                model = genai.GenerativeModel(gemini_image_model)
+
+                # Prepare generation config
+                generation_config = genai.types.GenerationConfig(
+                    temperature=0.8,
+                    top_p=0.9,
+                    max_output_tokens=2048,
+                )
+
+                # Add logo if available
+                logo_data = None
+                if profile_assets.get('logo'):
+                    try:
+                        # Download logo for use in generation
+                        import aiohttp
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(profile_assets['logo']) as response:
+                                if response.status == 200:
+                                    logo_data = await response.read()
+                                    logger.info("📎 Logo downloaded for carousel image generation")
+                    except Exception as logo_error:
+                        logger.warning(f"Could not download logo: {logo_error}")
+
+                # Generate the image using Gemini (consistent with rest of codebase)
+                logger.info(f"🎨 Generating carousel image {i+1} with Gemini...")
+
+                # Prepare contents for Gemini API (same pattern as other image generation in codebase)
+                contents = [enhanced_prompt]  # Text prompt is always first
+
+                # Add logo as reference if available
+                if logo_data:
+                    try:
+                        from PIL import Image
+                        import io
+                        logo_image = Image.open(io.BytesIO(logo_data))
+                        logo_image.thumbnail((200, 200))
+                        logo_buffer = io.BytesIO()
+                        logo_image.save(logo_buffer, format='PNG')
+                        logo_buffer.seek(0)
+                        contents.append(Image.open(logo_buffer))
+                        logger.info("📎 Added logo as reference for carousel image generation")
+                    except Exception as logo_proc_error:
+                        logger.warning(f"Could not process logo for reference: {logo_proc_error}")
+
+                try:
+                    # Generate image with Gemini
+                    image_response = await model.generate_content_async(
+                        contents,
+                        generation_config=generation_config
+                    )
+
+                    logger.info(f"🎨 Gemini response received for carousel image {i+1}")
+
+                    if image_response and hasattr(image_response, 'candidates') and image_response.candidates:
+                        candidate = image_response.candidates[0]
+                        if hasattr(candidate, 'content') and candidate.content.parts:
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'inline_data') and part.inline_data:
+                                    # Extract image data
+                                    image_data = part.inline_data.data
+                                    if not image_data:
+                                        logger.error(f"❌ No image data received from Gemini for carousel image {i+1}")
+                                        continue
+
+                                    # Save to Supabase storage
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    safe_business_name = business_context.get('business_name', 'business').replace(' ', '_').replace('/', '_')
+                                    filename = f"carousel_{safe_business_name}_{i+1}_{timestamp}.png"
+
+                                    file_path = f"carousel-images/{filename}"
+                                    logger.info(f"📤 Uploading carousel image {i+1} to Supabase: {file_path}")
+
+                                    storage_response = supabase.storage.from_("ai-generated-images").upload(
+                                        file_path,
+                                        image_data,
+                                        file_options={"content-type": "image/png"}
+                                    )
+
+                                    if hasattr(storage_response, 'error') and storage_response.error:
+                                        logger.error(f"❌ Storage upload failed for carousel image {i+1}: {storage_response.error}")
+                                        continue
+
+                                    # Get public URL
+                                    public_url = supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+                                    if not public_url:
+                                        logger.error(f"❌ No public URL returned for carousel image {i+1}")
+                                        continue
+
+                                    image_urls.append(public_url)
+                                    previous_image_url = public_url
+
+                                    logger.info(f"✅ Carousel image {i+1} generated and saved to Supabase: {public_url}")
+
+                                else:
+                                    logger.warning(f"⚠️ No inline_data found in Gemini response part for carousel image {i+1}")
+                        else:
+                            logger.error(f"❌ No content parts found in Gemini response for carousel image {i+1}")
+                    else:
+                        logger.error(f"❌ No candidates found in Gemini response for carousel image {i+1}")
+
+                except Exception as gemini_error:
+                    logger.error(f"❌ Gemini generation failed for carousel image {i+1}: {str(gemini_error)}")
+                    continue
+
+                logger.info(f"🎨 Gemini response received for image {i+1}")
+
+                if response and hasattr(response, 'candidates') and response.candidates:
+                    candidate = response.candidates[0]
+                    if hasattr(candidate, 'content') and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'inline_data') and part.inline_data:
+                                # Save image to Supabase storage
+                                image_data = part.inline_data.data
+                                if not image_data:
+                                    logger.error(f"❌ No image data received for carousel image {i+1}")
+                                    continue
+
+                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                safe_business_name = business_context.get('business_name', 'business').replace(' ', '_').replace('/', '_')
+                                filename = f"carousel_{safe_business_name}_{i+1}_{timestamp}.png"
+
+                                try:
+                                    # Upload to Supabase
+                                    file_path = f"carousel-images/{filename}"
+                                    logger.info(f"📤 Uploading image {i+1} to Supabase: {file_path}")
+
+                                    storage_response = supabase.storage.from_("ai-generated-images").upload(
+                                        file_path,
+                                        image_data,
+                                        file_options={"content-type": "image/png"}
+                                    )
+
+                                    # Check for upload errors
+                                    if hasattr(storage_response, 'error') and storage_response.error:
+                                        logger.error(f"❌ Storage upload failed for image {i+1}: {storage_response.error}")
+                                        continue
+
+                                    # Get public URL
+                                    public_url = supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+                                    if not public_url:
+                                        logger.error(f"❌ No public URL returned for image {i+1}")
+                                        continue
+
+                                    image_urls.append(public_url)
+                                    previous_image_url = public_url
+
+                                    logger.info(f"✅ Carousel image {i+1} generated and uploaded successfully: {public_url}")
+
+                                except Exception as upload_error:
+                                    logger.error(f"❌ Error uploading carousel image {i+1}: {str(upload_error)}")
+                                    continue
+                            else:
+                                logger.warning(f"⚠️ No inline_data found in response part for image {i+1}")
+                    else:
+                        logger.error(f"❌ No content parts found in Gemini response for image {i+1}")
+                else:
+                    logger.error(f"❌ No candidates found in Gemini response for image {i+1}")
+                    logger.error(f"Response object: {type(response)}")
+                    if hasattr(response, 'text'):
+                        logger.error(f"Response text: {response.text}")
+
+            except Exception as img_error:
+                logger.error(f"❌ Failed to generate carousel image {i+1}: {str(img_error)}")
+                # Continue with next image rather than failing completely
+                continue
+
+        logger.info(f"✅ Generated {len(image_urls)} carousel images successfully")
+        return image_urls
+
+    except Exception as e:
+        logger.error(f"❌ Error in carousel image generation: {str(e)}")
+        return []
+
+
 # ==================== UTILITY FUNCTIONS ====================
 
 def detect_and_replace_pii_in_query(query: str) -> tuple[str, list, list]:
@@ -5360,6 +5727,7 @@ async def handle_create_content(state: AgentState) -> AgentState:
         generated_content = ""
         generated_image_url = None
         content_data = {}  # Store data to save to database
+        title = payload.get('title') or payload.get('content_idea', '')
 
         # Load business context and profile assets from profiles table
         business_context = {}
@@ -5422,7 +5790,7 @@ async def handle_create_content(state: AgentState) -> AgentState:
         # Handle different content types
         content_type = payload.get('content_type', '')
 
-        if content_type in ['static_post', 'carousel']:
+        if content_type == 'static_post':
             # Step 1: Get trends from Grok API for trend-aware content
             topic = payload.get('content_idea', '')
             trends_data = await get_trends_from_grok(topic, business_context)
@@ -5438,67 +5806,84 @@ async def handle_create_content(state: AgentState) -> AgentState:
             logger.info(prompt)
             logger.info("=" * 80)
 
-            # Initialize variables
-            title = ""
-            content = ""
-            hashtags = []
-
-            # Generate structured content with GPT-4o-mini
-            from datetime import datetime
-            content_gen_datetime = datetime.now()
-            logger.info(f"📝 Generating content with GPT-4o-mini for platform: {platform} at {content_gen_datetime.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            llm_response_text = ""
             if openai_client:
-                response = openai_client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=600,
-                    temperature=0.7
-                )
-                generated_response = response.choices[0].message.content.strip()
-
-                # Parse platform-specific response
-                if platform.lower() == 'instagram':
-                    parsed_content = parse_instagram_response(generated_response)
-                    title = parsed_content['title']
-                    content = parsed_content['content']
-                    hashtags = parsed_content['hashtags']
-                else:
-                    # Fallback parsing for other platforms
-                    # Variables already initialized above
-
-                    lines = generated_response.split('\n')
-                    current_section = None
-
-                    for line in lines:
-                        line = line.strip()
-                        if line.startswith('TITLE:'):
-                            title = line.replace('TITLE:', '').strip()
-                            current_section = 'title'
-                        elif line.startswith('CONTENT:'):
-                            content = line.replace('CONTENT:', '').strip()
-                            current_section = 'content'
-                        elif line.startswith('HASHTAGS:'):
-                            hashtags_text = line.replace('HASHTAGS:', '').strip()
-                            hashtags = hashtags_text.split() if hashtags_text else []
-                            current_section = 'hashtags'
-                        elif current_section == 'content' and line:
-                            content += ' ' + line
-                        elif current_section == 'hashtags' and line:
-                            hashtags.extend(line.split())
-
-                # Save structured data
-                content_data['title'] = title
-                content_data['content'] = content
-                content_data['hashtags'] = hashtags
-
-                generated_content = f"{title}\n\n{content}\n\n{' '.join(hashtags)}"
+                try:
+                    response = openai_client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=700,
+                        temperature=0.75
+                    )
+                    llm_response_text = response.choices[0].message.content.strip()
+                except Exception as response_error:
+                    logger.error(f"❌ Static post LLM generation failed: {response_error}")
+                    llm_response_text = ""
             else:
-                generated_content = "OpenAI client not configured"
-                content_data['title'] = "Content Generation Failed"
-                content_data['content'] = generated_content
-                content_data['hashtags'] = []
-                title = "Content Generation Failed"
-                content = generated_content
+                logger.warning("OpenAI client unavailable for static post generation")
+
+            parsed_content = parse_instagram_response(llm_response_text) if llm_response_text else {
+                "title": f"{payload.get('content_idea', '')[:50]}",
+                "content": payload.get('content', payload.get('content_idea', '')),
+                "hashtags": []
+            }
+
+            content_data['title'] = parsed_content.get('title') or (payload.get('content_idea', '')[:60])
+            content_data['content'] = parsed_content.get('content') or payload.get('content', payload.get('content_idea', ''))
+            content_data['hashtags'] = parsed_content.get('hashtags', [])
+            generated_content = f"{content_data['title']}\n\n{content_data['content']}\n\n{' '.join(content_data['hashtags'])}"
+
+        elif content_type == 'carousel':
+            # CAROUSEL POST GENERATION
+            logger.info("🎠 Starting carousel post generation")
+
+            # Step 1: Determine number of images (default to 4, can be customized)
+            num_images = 4  # Default carousel length
+            if payload.get('content_idea'):
+                # Try to extract number from content idea (e.g., "5 slide carousel")
+                import re
+                number_match = re.search(r'(\d+)\s*(?:slide|image|photo|card)', payload['content_idea'], re.IGNORECASE)
+                if number_match:
+                    requested_num = int(number_match.group(1))
+                    num_images = max(3, min(6, requested_num))  # Keep between 3-6
+                    logger.info(f"📏 User requested {requested_num} images, adjusted to {num_images}")
+
+            # Step 2: Generate complete carousel plan (title, caption, and all image prompts)
+            carousel_plan = generate_carousel_image_prompts(
+                payload.get('content_idea', ''),
+                num_images,
+                business_context,
+                profile_assets
+            )
+
+            # Step 3: Generate all carousel images iteratively
+            carousel_image_urls = await generate_carousel_images(
+                carousel_plan,
+                business_context,
+                profile_assets
+            )
+
+            if not carousel_image_urls:
+                raise Exception("Failed to generate carousel images")
+
+            # Step 4: Extract data from carousel plan and save
+            title = carousel_plan["title"]
+            content = carousel_plan["caption"]
+            hashtags = []  # Extract hashtags from caption if needed
+
+            # Extract hashtags from caption (simple extraction)
+            import re
+            hashtag_matches = re.findall(r'#\w+', content)
+            hashtags = hashtag_matches
+
+            # Save carousel data
+            content_data['title'] = title
+            content_data['content'] = content
+            content_data['hashtags'] = hashtags
+            content_data['carousel_images'] = carousel_image_urls  # Save to carousel_images column
+
+            generated_content = f"{title}\n\n{content}\n\n{' '.join(hashtags)}\n\n🎠 Carousel with {len(carousel_image_urls)} images"
+            logger.info(f"✅ Generated carousel post with {len(carousel_image_urls)} images from complete plan")
 
         elif content_type == 'short_video or reel':
             # Check if user wants to upload their own video
@@ -5589,9 +5974,6 @@ Make it irresistible to click and watch!"""
                 logger.info("=" * 80)
                 logger.info(cover_prompt)
                 logger.info("=" * 80)
-
-                # Import datetime locally (following working image generation pattern)
-                from datetime import datetime
 
                 # Check if logo is available and prepare to send it to Gemini
                 logo_data = None
@@ -5812,9 +6194,17 @@ Include timing estimates for each section."""
             # Generate image using Gemini with the generated content and business context
             try:
                 # First, generate enhanced image prompt using AI
+                content_for_image = content_data.get('content') or ""
+                if not content_for_image and content_type == 'static_post':
+                    content_for_image = (
+                        generated_content
+                        or payload.get('content')
+                        or payload.get('content_idea')
+                        or ""
+                    )
                 generated_post = {
                     'title': title,
-                    'content': content
+                    'content': content_for_image
                 }
 
                 enhanced_prompt_data = await generate_image_enhancer_prompt(
@@ -5822,7 +6212,6 @@ Include timing estimates for each section."""
                 )
 
                 # Build final image generation prompt using the enhanced prompt
-                from datetime import datetime
                 current_datetime = datetime.now()
                 current_date = current_datetime.strftime("%Y-%m-%d")
                 current_time = current_datetime.strftime("%H:%M:%S UTC")
@@ -6009,8 +6398,11 @@ Create a high-quality, professional image optimized for Instagram that reflects 
                     saved_columns = list(content_data.keys())
                     logger.info(f"📝 Saved content to columns: {', '.join(saved_columns)}")
                     logger.info(f"📸 Images in content_data: {'images' in content_data and len(content_data.get('images', []))} image(s)")
+                    logger.info(f"🎠 Carousel images in content_data: {'carousel_images' in content_data and len(content_data.get('carousel_images', []))} image(s)")
                     if 'images' in content_data:
                         logger.info(f"📸 Image URLs saved: {len(content_data['images'])} URL(s) in database")
+                    if 'carousel_images' in content_data:
+                        logger.info(f"🎠 Carousel image URLs saved: {len(content_data['carousel_images'])} URL(s) in database")
                 else:
                     logger.warning("Failed to save content to created_content table - no data returned")
 
@@ -6029,10 +6421,18 @@ Create a high-quality, professional image optimized for Instagram that reflects 
                 if content_response.data and len(content_response.data) > 0:
                     item = content_response.data[0]
 
-                    # Extract image URL from images array (first image if available)
+                    # Extract image URL from images array or carousel_images array
                     images = item.get('images', [])
+                    carousel_images = item.get('carousel_images', [])
                     media_url = None
-                    if images and len(images) > 0:
+
+                    if carousel_images and len(carousel_images) > 0:
+                        # For carousel posts, use first carousel image
+                        first_image = carousel_images[0]
+                        if isinstance(first_image, str):
+                            media_url = first_image
+                    elif images and len(images) > 0:
+                        # For regular posts, use first image
                         first_image = images[0]
                         if isinstance(first_image, str):
                             media_url = first_image
@@ -6066,6 +6466,9 @@ Create a high-quality, professional image optimized for Instagram that reflects 
                         content_text = item.get('short_video_script', '')
                     elif content_type == 'long_video':
                         content_text = item.get('long_video_script', '')
+                    elif content_type == 'carousel':
+                        carousel_images = item.get('carousel_images', [])
+                        content_text = f"{item.get('content', '')}\n\n🎠 Carousel Post with {len(carousel_images)} images"
                     elif content_type == 'message':
                         content_text = item.get('message', '')
                     else:

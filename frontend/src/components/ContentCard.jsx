@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Copy, Edit, Eye, Heart, MessageCircle, Share, Calendar, Hash, Image as ImageIcon, Video, FileText, Layers, ChevronLeft, ChevronRight, Play } from 'lucide-react';
 
-const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview, minimal = false }) => {
+const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview, minimal = false, isDarkMode = false }) => {
   const [copied, setCopied] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
@@ -123,6 +123,7 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
   };
 
   const contentText = content.content || content;
+  const contentTextClass = isDarkMode ? 'text-white' : 'text-gray-800';
   const title = content.title || `${contentType} for ${platform}`;
   const hashtags = content.hashtags || [];
   const mediaUrl = content.media_url || content.mediaUrl;
@@ -205,7 +206,7 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
       {/* Media First (for minimal mode) */}
       {minimal && (isCarousel && carouselImages.length > 0 ? (
         <div className="relative group">
-          <div className="relative overflow-hidden h-32 bg-gray-100 rounded-t-xl">
+          <div className="relative overflow-hidden aspect-square bg-gray-100 rounded-t-xl">
             <div
               className="flex transition-transform duration-300 ease-in-out h-full"
               style={{ transform: `translateX(-${currentCarouselIndex * 100}%)` }}
@@ -256,27 +257,24 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
       ))}
 
       {/* Header */}
-      <div className={`${minimal ? 'bg-white border-b border-gray-100' : `bg-gradient-to-r ${getPlatformColor(platform)}`} p-4 ${minimal ? 'text-gray-900' : 'text-white'}`}>
+      <div
+        className={`p-4 ${
+          minimal
+            ? isDarkMode
+              ? 'bg-gray-900/70 border-b border-gray-800 text-white'
+              : 'bg-white border-b border-gray-100 text-gray-900'
+            : isDarkMode
+              ? 'bg-gray-900/80 border-b border-gray-800 text-white'
+              : `bg-gradient-to-r ${getPlatformColor(platform)} text-white`
+        }`}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3 flex-1 min-w-0">
             {!minimal && <span className="text-2xl flex-shrink-0">{getPlatformIcon(platform)}</span>}
             <div className="flex-1 min-w-0">
-              <h3 className={`${minimal ? 'font-normal text-sm' : 'font-semibold text-lg'} truncate overflow-hidden whitespace-nowrap text-ellipsis`}>{title}</h3>
-              {!minimal && (
-                <div className="flex items-center space-x-2 text-sm opacity-90">
-                  {getContentTypeIcon(contentType)}
-                  <span className="capitalize">{contentType}</span>
-                  <span>•</span>
-                  <span className="capitalize">{platform}</span>
-                </div>
-              )}
-              {minimal && (
-                <div className="flex items-center space-x-2 text-xs text-gray-600 mt-1">
-                  <span className="capitalize">{contentType}</span>
-                  <span>•</span>
-                  <span className="capitalize">{platform}</span>
-                </div>
-              )}
+              <div className={`${minimal ? 'text-xs font-normal' : 'text-sm font-normal'} truncate overflow-hidden whitespace-nowrap text-ellipsis`}>
+                {(platform || 'Platform') + ' | ' + (contentType || 'Content')}
+              </div>
             </div>
           </div>
           {!minimal && (
@@ -319,7 +317,7 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
       {!minimal && (isCarousel && carouselImages.length > 0 ? (
         <div className="relative group">
           {/* Carousel Slider */}
-          <div className="relative overflow-hidden h-64 bg-gray-100">
+          <div className="relative overflow-hidden aspect-square bg-gray-100">
             <div
               className="flex transition-transform duration-300 ease-in-out h-full"
               style={{ transform: `translateX(-${currentCarouselIndex * 100}%)` }}
@@ -460,8 +458,25 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
       ))}
 
       {/* Content - Hidden in minimal mode */}
+      {/* Title below carousel */}
+      {title && (
+        <div
+          className={`px-4 py-3 border-b ${
+            isDarkMode ? 'border-gray-800 bg-gray-900 text-white' : 'border-gray-100 bg-white text-gray-900'
+          }`}
+        >
+          <h3 className={`text-lg font-normal leading-tight ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+            {title}
+          </h3>
+        </div>
+      )}
+
       {!minimal && (
-        <div className="p-4">
+        <div
+          className={`p-4 space-y-3 ${
+            isDarkMode ? 'bg-gray-900 border-t border-gray-800' : ''
+          }`}
+        >
           <div className="space-y-3">
             {/* Handle different content types */}
             {contentType?.toLowerCase() === 'email' && content.email_subject && content.email_body ? (
@@ -490,7 +505,7 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
             ) : (contentType?.toLowerCase() === 'short video' || contentType?.toLowerCase() === 'long video') && (content.short_video_script || content.long_video_script) ? (
               <div>
                 <h4 className="font-semibold text-gray-900 mb-2">🎬 Video Script:</h4>
-                <div className="text-gray-800 leading-relaxed bg-gray-50 p-3 rounded-lg border-l-4 border-purple-400">
+                <div className={`${contentTextClass} leading-relaxed bg-gray-50 p-3 rounded-lg border-l-4 border-purple-400`}>
                   {showFullContent ? (content.short_video_script || content.long_video_script) : (content.short_video_script || content.long_video_script).substring(0, 200)}
                   {(content.short_video_script || content.long_video_script).length > 200 && (
                     <button
@@ -503,7 +518,7 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
                 </div>
               </div>
             ) : (contentType?.toLowerCase() === 'short_video or reel') && content.content ? (
-              <div className="text-gray-800 leading-relaxed">
+              <div className={`${contentTextClass} leading-relaxed`}>
                 {showFullContent ? content.content : content.content.substring(0, 200)}
                 {content.content.length > 200 && (
                   <button
@@ -522,7 +537,7 @@ const ContentCard = ({ content, platform, contentType, onEdit, onCopy, onPreview
                 </div>
               </div>
             ) : (
-              <div className="text-gray-800 leading-relaxed">
+              <div className={`${contentTextClass} leading-relaxed`}>
                 {showFullContent ? contentText : contentText.substring(0, 200)}
                 {contentText.length > 200 && (
                   <button
