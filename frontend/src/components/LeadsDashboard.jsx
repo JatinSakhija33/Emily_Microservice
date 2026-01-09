@@ -622,10 +622,12 @@ const LeadsDashboard = () => {
         fetchingFreshData={false}
       />
 
-      <div className="md:ml-48 xl:ml-64 flex flex-col min-h-screen">
+      <div className={`md:ml-48 xl:ml-64 flex flex-col min-h-screen ${
+        isDarkMode ? 'md:bg-gray-800' : 'md:bg-gray-50'
+      }`}>
         {/* Header */}
         <div className={`shadow-sm border-b sticky top-0 z-20 ${
-          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white'
+          isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white'
         }`}>
           <div className="px-4 lg:px-6 py-3 lg:py-4">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">

@@ -550,9 +550,11 @@ const SocialMediaDashboard = () => {
       <MobileNavigation />
       
       {/* Main Content */}
-      <div className="ml-0 md:ml-48 xl:ml-64 flex flex-col min-h-screen pt-16 md:pt-0">
+      <div className={`ml-0 md:ml-48 xl:ml-64 flex flex-col min-h-screen pt-16 md:pt-0 ${
+        isDarkMode ? 'md:bg-gray-800' : 'md:bg-gray-50'
+      }`}>
         {/* Header - Part of Main Content */}
-        <div className={`shadow-sm border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+        <div className={`shadow-sm border-b ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}>
           <div className="px-3 sm:px-4 md:px-6 py-3 md:py-4">
             <div className="flex items-center justify-between gap-2 sm:gap-3 md:gap-4 flex-wrap">
               {/* Heading - Matching main dashboard format */}
@@ -674,7 +676,7 @@ const SocialMediaDashboard = () => {
                   const accountUsername = connection?.username || connection?.page_name || platform.toLowerCase()
                   
                   return (
-                    <div key={platform} className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden`}>
+                    <div key={platform} className={`${isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'} rounded-lg shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden`}>
                       {latestPost ? (
                         <>
                           {/* Platform Header */}

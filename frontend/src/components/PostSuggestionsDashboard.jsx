@@ -426,7 +426,7 @@ const PostSuggestionsDashboard = () => {
 
       {/* Main Content */}
       <div className={`md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden pt-16 md:pt-0 ${
-        isDarkMode ? 'md:bg-gray-900' : 'md:bg-white'
+        isDarkMode ? 'md:bg-gray-800' : 'md:bg-gray-50'
       }`}>
         {/* Header */}
         <div className={`hidden md:block shadow-sm border-b z-30 flex-shrink-0 ${
