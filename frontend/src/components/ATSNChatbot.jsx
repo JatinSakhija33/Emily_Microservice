@@ -141,8 +141,6 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const [uploadedMediaUrls, setUploadedMediaUrls] = useState([])
   const [selectedFilesForUpload, setSelectedFilesForUpload] = useState([])
   const [businessName, setBusinessName] = useState('') // Business name from profile
-  const [businessLogo, setBusinessLogo] = useState(null) // Cached business logo (base64 data URL)
-  const [businessLogoError, setBusinessLogoError] = useState(false) // Track if logo failed to load
   const [isUploadingMedia, setIsUploadingMedia] = useState(false)
   const [tooltipAgent, setTooltipAgent] = useState(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
@@ -494,76 +492,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       }
     }
 
-    // Load and cache business logo from profile
-    const loadBusinessLogo = async () => {
-      if (!user) return
-
-      try {
-        const cacheKey = `business_logo_${user.id}`
-        const cacheTimestampKey = `business_logo_timestamp_${user.id}`
-        const CACHE_DURATION = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
-
-        // Reset error state when loading logo
-        setBusinessLogoError(false)
-
-        // Check cache first
-        const cachedLogo = localStorage.getItem(cacheKey)
-        const cachedTimestamp = localStorage.getItem(cacheTimestampKey)
-        
-        if (cachedLogo && cachedTimestamp) {
-          const timestamp = parseInt(cachedTimestamp, 10)
-          const now = Date.now()
-          
-          // Use cached logo if it's still valid
-          if (now - timestamp < CACHE_DURATION) {
-            setBusinessLogo(cachedLogo)
-            return
-          }
-        }
-
-        // Fetch logo_url from profiles table
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('logo_url')
-          .eq('id', user.id)
-          .single()
-
-        if (error || !profile?.logo_url) {
-          console.log('No logo URL found in profile')
-          return
-        }
-
-        // Download the logo image
-        const response = await fetch(profile.logo_url)
-        if (!response.ok) {
-          console.error('Failed to download logo:', response.status)
-          return
-        }
-
-        const blob = await response.blob()
-        
-        // Convert to base64 data URL
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          const base64Logo = reader.result
-          
-          // Cache the logo
-          localStorage.setItem(cacheKey, base64Logo)
-          localStorage.setItem(cacheTimestampKey, Date.now().toString())
-          
-          setBusinessLogo(base64Logo)
-        }
-        reader.onerror = () => {
-          console.error('Error converting logo to base64')
-        }
-        reader.readAsDataURL(blob)
-      } catch (error) {
-        console.error('Error loading business logo:', error)
-      }
-    }
-
     loadBusinessName()
-    loadBusinessLogo()
   }, [user])
 
 
@@ -3173,13 +3102,11 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                 message.agent_name?.toLowerCase() === 'emily' || message.agent_name?.toLowerCase() === 'leo' || message.agent_name?.toLowerCase() === 'chase' || message.agent_name?.toLowerCase() === 'atsn ai'
                   ? 'w-16 h-16'
                   : 'w-8 h-8'
-              } rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden ${
+              } rounded-full flex items-center justify-center flex-shrink-0 ${
                 message.sender === 'bot' ? 'hover:scale-110 transition-transform duration-200 cursor-pointer border-2 border-gray-300' : ''
               } ${
-              message.sender === 'user' && (!businessLogo || businessLogoError)
+              message.sender === 'user'
                 ? 'bg-gradient-to-br from-pink-500 to-rose-500'
-                : message.sender === 'user' && businessLogo && !businessLogoError
-                ? 'bg-white' // White background for transparent logos
                 : message.agent_name?.toLowerCase() === 'leo'
                   ? '' // No background for Leo
                 : message.agent_name?.toLowerCase() === 'chase'
@@ -3194,18 +3121,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
               onMouseLeave={message.sender === 'bot' ? handleAgentLeave : undefined}
             >
               {message.sender === 'user' ? (
-                businessLogo && !businessLogoError ? (
-                  <img 
-                    src={businessLogo} 
-                    alt="Business Logo" 
-                    className="w-full h-full object-cover rounded-full"
-                    onError={() => {
-                      setBusinessLogoError(true)
-                    }}
-                  />
-                ) : (
-                  <User className="w-4 h-4 text-white" />
-                )
+                <User className="w-4 h-4 text-white" />
               ) : (
                 renderAgentIcon(message.agent_name)
               )}

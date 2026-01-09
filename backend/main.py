@@ -40,6 +40,8 @@ from routers.admin import router as admin_router
 from routers.analytics_insights import router as analytics_insights_router
 from routers.atsn_chatbot import router as atsn_chatbot_router
 from routers.profile import router as profile_router
+from routers import document_parser
+from routers import smart_search
 from services.scheduler import start_analytics_scheduler, stop_analytics_scheduler, get_scheduler_status, trigger_analytics_collection_now
 from services.image_editor_service import image_editor_service
 
@@ -128,6 +130,8 @@ app.include_router(admin_router)
 app.include_router(analytics_insights_router)
 app.include_router(atsn_chatbot_router)
 app.include_router(profile_router)
+app.include_router(document_parser.router)
+app.include_router(smart_search.router)
 
 # Health check endpoint
 @app.get("/health")

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Eye, EyeOff, CheckCircle, XCircle, Loader2 } from 'lucide-react'
-import { authAPI } from '../services/api'
+import { Eye, EyeOff, CheckCircle, XCircle, Loader2, Upload } from 'lucide-react'
+import { authAPI, documentAPI } from '../services/api'
 import PasswordStrengthIndicator from './PasswordStrengthIndicator'
 
 function SignUp() {
@@ -30,9 +30,46 @@ function SignUp() {
     isValid: false,
     message: ''
   })
-  
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+
   const { register, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setUploadingDoc(true)
+    setError('')
+
+    try {
+      const response = await documentAPI.parseSignupDoc(file)
+      const { name, email } = response.data
+
+      setFormData(prev => ({
+        ...prev,
+        name: name || prev.name,
+        email: email || prev.email
+      }))
+
+      if (email) {
+        // Trigger validation if email was found
+        validateEmail(email)
+      }
+
+      setSuccessMessage('Form autofilled from document!')
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(''), 3000)
+
+    } catch (err) {
+      console.error(err)
+      setError('Failed to extract data from document. Please fill manually.')
+    } finally {
+      setUploadingDoc(false)
+      // Reset file input
+      e.target.value = null
+    }
+  }
 
   // Password validation function
   const validatePassword = (password) => {
@@ -139,7 +176,7 @@ function SignUp() {
         validatePasswordMatch(e.target.value, formData.confirmPassword)
       }
     }
-    
+
     // Validate password match when confirm password changes
     if (e.target.name === 'confirmPassword') {
       validatePasswordMatch(formData.password, e.target.value)
@@ -212,7 +249,7 @@ function SignUp() {
 
     try {
       const result = await loginWithGoogle()
-      
+
       if (!result.success) {
         setError(result.error)
       }
@@ -242,6 +279,32 @@ function SignUp() {
 
         {/* Sign Up Form Card */}
         <div className="bg-gray-800 rounded-2xl shadow-lg p-8 border border-gray-700">
+          <div className="mb-6">
+            <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-600 border-dashed rounded-lg cursor-pointer bg-gray-700 hover:bg-gray-600 transition-colors">
+              <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                {uploadingDoc ? (
+                  <div className="flex items-center text-gray-400">
+                    <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                    <span className="text-sm">Analyzing document...</span>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-6 h-6 mb-2 text-gray-400" />
+                    <p className="text-sm text-gray-400"><span className="font-semibold">Click to upload</span> resume or doc to autofill</p>
+                    <p className="text-xs text-gray-500">PDF, DOCX, TXT</p>
+                  </>
+                )}
+              </div>
+              <input
+                type="file"
+                className="hidden"
+                accept=".pdf,.docx,.doc,.txt"
+                onChange={handleFileUpload}
+                disabled={uploadingDoc}
+              />
+            </label>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Name Field */}
             <div>
@@ -273,13 +336,12 @@ function SignUp() {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors bg-gray-700 text-white placeholder-gray-500 ${
-                    emailValidation.isValid === true 
-                      ? 'border-green-500 focus:ring-green-500'
-                      : emailValidation.isValid === false 
+                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors bg-gray-700 text-white placeholder-gray-500 ${emailValidation.isValid === true
+                    ? 'border-green-500 focus:ring-green-500'
+                    : emailValidation.isValid === false
                       ? 'border-red-500 focus:ring-red-500'
                       : 'border-gray-600'
-                  }`}
+                    }`}
                   placeholder="Enter your email address"
                 />
                 <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -299,11 +361,10 @@ function SignUp() {
 
             {/* Password Field */}
             <div className="relative">
-              <label htmlFor="password" className={`block text-sm font-medium mb-2 ${
-                emailValidation.isValid === false || emailValidation.isValidating
-                  ? 'text-gray-500'
-                  : 'text-gray-300'
-              }`}>
+              <label htmlFor="password" className={`block text-sm font-medium mb-2 ${emailValidation.isValid === false || emailValidation.isValidating
+                ? 'text-gray-500'
+                : 'text-gray-300'
+                }`}>
                 Password
                 {emailValidation.isValid === false && (
                   <span className="text-xs text-gray-500 ml-1">(Blocked - email exists)</span>
@@ -321,28 +382,26 @@ function SignUp() {
                   value={formData.password}
                   onChange={handleChange}
                   disabled={emailValidation.isValid === false || emailValidation.isValidating}
-                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors ${
-                    emailValidation.isValid === false || emailValidation.isValidating
-                      ? 'bg-gray-600 border-gray-500 text-gray-500 cursor-not-allowed'
-                      : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
-                  }`}
+                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors ${emailValidation.isValid === false || emailValidation.isValidating
+                    ? 'bg-gray-600 border-gray-500 text-gray-500 cursor-not-allowed'
+                    : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
+                    }`}
                   placeholder={
-                    emailValidation.isValid === false 
+                    emailValidation.isValid === false
                       ? "Email already exists - password not needed"
                       : emailValidation.isValidating
-                      ? "Checking email availability..."
-                      : "Create a password"
+                        ? "Checking email availability..."
+                        : "Create a password"
                   }
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   disabled={emailValidation.isValid === false || emailValidation.isValidating}
-                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${
-                    emailValidation.isValid === false || emailValidation.isValidating
-                      ? 'text-gray-300 cursor-not-allowed'
-                      : 'text-gray-400 hover:text-gray-600'
-                  }`}
+                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${emailValidation.isValid === false || emailValidation.isValidating
+                    ? 'text-gray-300 cursor-not-allowed'
+                    : 'text-gray-400 hover:text-gray-600'
+                    }`}
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
@@ -352,11 +411,11 @@ function SignUp() {
                   Please use a different email address to continue
                 </p>
               )}
-              
+
               {/* Password Strength Indicator */}
               {emailValidation.isValid === true && formData.password && (
-                <PasswordStrengthIndicator 
-                  password={formData.password} 
+                <PasswordStrengthIndicator
+                  password={formData.password}
                   confirmPassword={formData.confirmPassword}
                 />
               )}
@@ -365,11 +424,10 @@ function SignUp() {
 
             {/* Confirm Password Field */}
             <div>
-              <label htmlFor="confirmPassword" className={`block text-sm font-medium mb-2 ${
-                emailValidation.isValid === false || emailValidation.isValidating
-                  ? 'text-gray-500'
-                  : 'text-gray-300'
-              }`}>
+              <label htmlFor="confirmPassword" className={`block text-sm font-medium mb-2 ${emailValidation.isValid === false || emailValidation.isValidating
+                ? 'text-gray-500'
+                : 'text-gray-300'
+                }`}>
                 Confirm Password
                 {emailValidation.isValid === false && (
                   <span className="text-xs text-gray-500 ml-1">(Blocked - email exists)</span>
@@ -387,21 +445,20 @@ function SignUp() {
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   disabled={emailValidation.isValid === false || emailValidation.isValidating}
-                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors ${
-                    emailValidation.isValid === false || emailValidation.isValidating
-                      ? 'bg-gray-600 border-gray-500 text-gray-500 cursor-not-allowed'
-                      : passwordMatch.isValid && formData.confirmPassword
+                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors ${emailValidation.isValid === false || emailValidation.isValidating
+                    ? 'bg-gray-600 border-gray-500 text-gray-500 cursor-not-allowed'
+                    : passwordMatch.isValid && formData.confirmPassword
                       ? 'bg-green-900/20 border-green-500 focus:ring-green-500 text-white'
                       : passwordMatch.isValid === false && formData.confirmPassword
-                      ? 'bg-red-900/20 border-red-500 focus:ring-red-500 text-white'
-                      : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
-                  }`}
+                        ? 'bg-red-900/20 border-red-500 focus:ring-red-500 text-white'
+                        : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
+                    }`}
                   placeholder={
-                    emailValidation.isValid === false 
+                    emailValidation.isValid === false
                       ? "Email already exists - password not needed"
                       : emailValidation.isValidating
-                      ? "Checking email availability..."
-                      : "Confirm your password"
+                        ? "Checking email availability..."
+                        : "Confirm your password"
                   }
                 />
                 <div className="absolute right-10 top-1/2 transform -translate-y-1/2">
@@ -417,21 +474,19 @@ function SignUp() {
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   disabled={emailValidation.isValid === false || emailValidation.isValidating}
-                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${
-                    emailValidation.isValid === false || emailValidation.isValidating
-                      ? 'text-gray-300 cursor-not-allowed'
-                      : 'text-gray-400 hover:text-gray-600'
-                  }`}
+                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${emailValidation.isValid === false || emailValidation.isValidating
+                    ? 'text-gray-300 cursor-not-allowed'
+                    : 'text-gray-400 hover:text-gray-600'
+                    }`}
                 >
                   {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
-              
+
               {/* Password Match Status Message */}
               {emailValidation.isValid === true && formData.confirmPassword && passwordMatch.message && (
-                <p className={`mt-2 text-sm ${
-                  passwordMatch.isValid ? 'text-green-600' : 'text-red-600'
-                }`}>
+                <p className={`mt-2 text-sm ${passwordMatch.isValid ? 'text-green-600' : 'text-red-600'
+                  }`}>
                   {passwordMatch.message}
                 </p>
               )}
@@ -478,10 +533,10 @@ function SignUp() {
               className="w-full flex items-center justify-center px-4 py-3 border border-gray-600 rounded-lg shadow-sm bg-gray-700 text-gray-300 hover:bg-gray-600 focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-md"
             >
               <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
               </svg>
               {loading ? 'Signing in...' : 'Continue with Google'}
             </button>

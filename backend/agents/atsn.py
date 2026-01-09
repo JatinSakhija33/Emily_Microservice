@@ -1002,7 +1002,6 @@ HASHTAGS:
 def get_youtube_prompt(payload: dict, business_context: dict, parsed_trends: dict, profile_assets: dict = None) -> str:
     """Generate YouTube-optimized content prompt (Shorts or Video Description)"""
 
-    from datetime import datetime
     current_datetime = datetime.now()
     current_date = current_datetime.strftime("%Y-%m-%d")
     current_time = current_datetime.strftime("%H:%M:%S UTC")

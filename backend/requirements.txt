@@ -35,3 +35,5 @@ aiohttp
 textstat
 apscheduler
 playwright>=1.40.0
+python-docx
+PyPDF2

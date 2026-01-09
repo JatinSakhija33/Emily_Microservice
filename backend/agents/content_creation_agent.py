@@ -198,7 +198,7 @@ class ContentCreationAgent:
                 "business_name", "business_description", "brand_tone", "industry",
                 "target_audience", "brand_voice", "unique_value_proposition",
                 "primary_color", "secondary_color", "brand_colors", "logo_url",
-                "timezone", "location_city", "location_state", "location_country",
+                "timezone", "location_city", "location_state", "location_country", "address",
                 "posting_frequency", "preferred_content_types", "content_themes",
                 "social_media_platforms", "primary_goals"
             ]

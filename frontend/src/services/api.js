@@ -66,10 +66,10 @@ api.interceptors.response.use(
 
       try {
         console.log('🔄 401 error detected, attempting to refresh session...')
-        
+
         // Try to get a fresh session (Supabase auto-refreshes tokens)
         const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        
+
         if (sessionError || !session) {
           console.log('❌ No valid session found after 401 error')
           // Only logout if we're sure there's no valid session
@@ -87,7 +87,7 @@ api.interceptors.response.use(
         if (session?.access_token) {
           localStorage.setItem('authToken', session.access_token)
           originalRequest.headers.Authorization = `Bearer ${session.access_token}`
-          
+
           console.log('✅ Session refreshed, retrying original request...')
           // Retry the original request with the new token
           return api(originalRequest)
@@ -140,7 +140,7 @@ export const mediaAPI = {
   uploadLogo: (file) => {
     const formData = new FormData()
     formData.append('file', file)
-    
+
     return api.post('/media/upload-logo', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -150,7 +150,7 @@ export const mediaAPI = {
   uploadMedia: (file) => {
     const formData = new FormData()
     formData.append('file', file)
-    
+
     return api.post('/media/upload-media', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -160,13 +160,49 @@ export const mediaAPI = {
   extractColorsFromLogo: (logoUrl) => {
     const formData = new FormData()
     formData.append('logo_url', logoUrl)
-    
+
     return api.post('/media/extract-colors-from-logo', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     })
   },
+}
+
+
+export const documentAPI = {
+  parseSignupDoc: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    return api.post('/document-parser/parse-signup-doc', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+  parseOnboardingDoc: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    return api.post('/document-parser/parse-onboarding-doc', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+}
+
+
+export const smartSearchAPI = {
+  search: (query, type, google_place_id) => {
+    return api.post('/smart-search/', { query, type, google_place_id }, {
+      timeout: 60000 // 60s timeout for web search + parsing
+    })
+  },
+  autocomplete: (query) => {
+    return api.get(`/smart-search/autocomplete?query=${encodeURIComponent(query)}`)
+  }
 }
 
 export default api

@@ -6,12 +6,14 @@ import OnboardingComplete from './OnboardingComplete'
 import OnboardingFormSelector from './OnboardingFormSelector'
 import OnboardingForm from './OnboardingForm'
 import CreatorOnboardingForm from './CreatorOnboardingForm'
-import { ArrowLeft, ArrowRight, Check, LogOut } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, LogOut, Upload, Search } from 'lucide-react'
+import { documentAPI, smartSearchAPI } from '../services/api'
 import LogoUpload from './LogoUpload'
 import MediaUpload from './MediaUpload'
 import MultiMediaUpload from './MultiMediaUpload'
 import InfoTooltip from './InfoTooltip'
 import DualRangeSlider from './DualRangeSlider'
+
 
 const Onboarding = () => {
   const [selectedFormType, setSelectedFormType] = useState(null)
@@ -20,6 +22,7 @@ const Onboarding = () => {
   const [currentStep, setCurrentStep] = useState(0)
   const [completedSteps, setCompletedSteps] = useState(new Set())
   const [userNavigatedToStep0, setUserNavigatedToStep0] = useState(false)
+  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState([])
 
   const [formData, setFormData] = useState({
     business_name: '',
@@ -89,6 +92,269 @@ const Onboarding = () => {
   const [logoUrl, setLogoUrl] = useState('')
   const [logoError, setLogoError] = useState('')
   const [extractedColors, setExtractedColors] = useState([])
+
+  // Document Parser State
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [docUploadError, setDocUploadError] = useState('')
+  const [docUploadSuccess, setDocUploadSuccess] = useState('')
+
+  const handleDocUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setUploadingDoc(true)
+    setDocUploadError('')
+    setDocUploadSuccess('')
+
+    try {
+      const response = await documentAPI.parseOnboardingDoc(file)
+      const data = response.data
+      console.log('Parsed Doc Data:', data)
+
+      setFormData(prev => {
+        const newData = { ...prev }
+
+        // Basic Info
+        if (data.business_name && !newData.business_name) newData.business_name = data.business_name
+        if (data.business_description && !newData.business_description) newData.business_description = data.business_description
+        if (data.unique_value_proposition && !newData.unique_value_proposition) newData.unique_value_proposition = data.unique_value_proposition
+
+        // Arrays - append or set if empty
+        if (data.business_type && data.business_type.length > 0) {
+          data.business_type.forEach(t => {
+            if (!newData.business_type.includes(t)) newData.business_type.push(t)
+          })
+        }
+
+        if (data.industry && data.industry.length > 0) {
+          data.industry.forEach(i => {
+            const knownIndustry = industries.find(ind => ind.toLowerCase() === i.toLowerCase());
+            if (knownIndustry && !newData.industry.includes(knownIndustry)) {
+              newData.industry.push(knownIndustry);
+            } else if (!newData.industry.includes(i)) {
+              // console.log('Unknown industry:', i)
+            }
+          })
+        }
+
+        if (data.website_url) {
+          if (!newData.social_media_platforms.includes('Website')) newData.social_media_platforms.push('Website');
+        }
+
+        if (data.social_media_platforms && data.social_media_platforms.length > 0) {
+          data.social_media_platforms.forEach(p => {
+            const pLower = p.toLowerCase();
+            if (pLower.includes('instagram') && !newData.social_media_platforms.includes('Instagram')) newData.social_media_platforms.push('Instagram');
+            if (pLower.includes('facebook') && !newData.social_media_platforms.includes('Facebook')) newData.social_media_platforms.push('Facebook');
+            if (pLower.includes('linkedin') && !newData.social_media_platforms.includes('LinkedIn')) newData.social_media_platforms.push('LinkedIn');
+            if (pLower.includes('youtube') && !newData.social_media_platforms.includes('YouTube')) newData.social_media_platforms.push('YouTube');
+          })
+        }
+
+        // Contact
+        if (data.phone_number && !newData.phone_number) newData.phone_number = data.phone_number
+        if (data.address && !newData.street_address) newData.street_address = data.address;
+
+        return newData
+      })
+
+      setDocUploadSuccess('Document parsed! Form fields autofilled.')
+      setTimeout(() => setDocUploadSuccess(''), 3000)
+
+    } catch (err) {
+      console.error('Doc parse error:', err)
+      setDocUploadError('Failed to parse document. Please try manual entry.')
+    } finally {
+      setUploadingDoc(false)
+      // Reset file input
+      e.target.value = null
+    }
+  }
+
+  // Smart Search State
+  const [smartSearching, setSmartSearching] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState('')
+  const [smartSearchError, setSmartSearchError] = useState('')
+
+  const [smartSearchSuccess, setSmartSearchSuccess] = useState('')
+
+  // Optimized Autocomplete Trigger
+  useEffect(() => {
+    const query = formData.business_name || '';
+
+    // 1. Clear suggestions if too short
+    if (query.length < 3) {
+      setAutocompleteSuggestions([]);
+      return;
+    }
+
+    // 2. Define the API call
+    const fetchSuggestions = () => {
+      smartSearchAPI.autocomplete(query)
+        .then(res => setAutocompleteSuggestions(res.data.predictions || []))
+        .catch(() => setAutocompleteSuggestions([]));
+    };
+
+    // 3. Trigger Logic
+    if (query.endsWith(' ')) {
+      // Immediate trigger on word completion (Space)
+      fetchSuggestions();
+    } else {
+      // Debounce trigger for typing (800ms wait)
+      const timer = setTimeout(() => {
+        fetchSuggestions();
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [formData.business_name]);
+
+  const handleSmartSearch = async () => {
+    // Determine query from current input
+    const query = formData.business_name
+    if (!query || query.trim().length < 2) {
+      setSmartSearchError('Please enter a business name to search.')
+      return
+    }
+
+    setSmartSearching(true)
+    setSmartSearchError('')
+    setSmartSearchSuccess('')
+    setLoadingMessage("Connecting to Knowledge Graph...")
+
+    // Simulate dynamic progress stages
+    const steps = [
+      "Verifying Business Entity...",
+      "Scanning Public Reviews (Places API)...",
+      "Analyzing Brand Tone...",
+      "Reading Website Content...",
+      "Finalizing Smart Fill..."
+    ];
+
+    let stepIdx = 0;
+    const interval = setInterval(() => {
+      if (stepIdx < steps.length) {
+        setLoadingMessage(steps[stepIdx]);
+        stepIdx++;
+      }
+    }, 1500); // 1.5s per step to make it readable
+
+    try {
+      const response = await smartSearchAPI.search(query, 'business', formData.google_place_id)
+      clearInterval(interval);
+      setLoadingMessage("Processing Data...");
+
+
+      const nestedData = response.data.data
+
+      if (response.data.success && nestedData) {
+        // Flatten the nested JSON structure (step_0, step_1...)
+        let flatData = {}
+        Object.keys(nestedData).forEach(key => {
+          if (key.startsWith('step_') && typeof nestedData[key] === 'object') {
+            flatData = { ...flatData, ...nestedData[key] }
+          }
+        })
+        // Also merge top-level keys if any exist directly
+        flatData = { ...flatData, ...nestedData }
+
+        setFormData(prev => {
+          const newData = { ...prev }
+
+          // --- MAPPING LOGIC ---
+          // Simple Fields
+          if (flatData.business_name) newData.business_name = flatData.business_name
+          if (flatData.business_description) newData.business_description = flatData.business_description
+          if (flatData.website_url) newData.website_url = flatData.website_url
+          if (flatData.brand_tone) newData.brand_tone = flatData.brand_tone
+          if (flatData.brand_voice) newData.brand_voice = flatData.brand_voice
+          if (flatData.city) newData.city = flatData.city
+          if (flatData.state) newData.state = flatData.state
+          if (flatData.country) newData.country = flatData.country
+          if (flatData.unique_value_proposition) newData.unique_value_proposition = flatData.unique_value_proposition
+          if (flatData.monthly_budget_range) newData.monthly_budget_range = flatData.monthly_budget_range
+
+          // Industry: Handle Array vs String mismatch
+          if (flatData.industry) {
+            const indVal = Array.isArray(flatData.industry) ? flatData.industry : [flatData.industry];
+            indVal.forEach(i => {
+              const knownIndustry = industries.find(ind => ind.toLowerCase() === i.toLowerCase());
+              if (knownIndustry && !newData.industry.includes(knownIndustry)) {
+                newData.industry.push(knownIndustry);
+              }
+            });
+          }
+
+          // Social Media Platforms
+          if (flatData.current_presence || flatData.social_media_platforms) {
+            const platforms = [...(flatData.current_presence || []), ...(flatData.social_media_platforms || [])];
+            platforms.forEach(p => {
+              const pLower = p.toLowerCase();
+              if (pLower.includes('instagram') && !newData.social_media_platforms.includes('Instagram')) newData.social_media_platforms.push('Instagram');
+              if (pLower.includes('facebook') && !newData.social_media_platforms.includes('Facebook')) newData.social_media_platforms.push('Facebook');
+              if (pLower.includes('linkedin') && !newData.social_media_platforms.includes('LinkedIn')) newData.social_media_platforms.push('LinkedIn');
+              if (pLower.includes('youtube') && !newData.social_media_platforms.includes('YouTube')) newData.social_media_platforms.push('YouTube');
+              if (pLower.includes('tiktok') && !newData.social_media_platforms.includes('TikTok')) newData.social_media_platforms.push('TikTok');
+              if (pLower.includes('twitter') || pLower.includes('x')) {
+                if (!newData.social_media_platforms.includes('X (Twitter)')) newData.social_media_platforms.push('X (Twitter)');
+              }
+            })
+          }
+
+          // Target Audience: Age Range Parsing
+          if (flatData.age_group && Array.isArray(flatData.age_group)) {
+            let min = 90, max = 0;
+            flatData.age_group.forEach(range => {
+              const nums = range.match(/\d+/g);
+              if (nums) {
+                nums.forEach(n => {
+                  const val = parseInt(n);
+                  if (val < min) min = val;
+                  if (val > max) max = val;
+                });
+              }
+            });
+            // Set slider values if valid
+            if (max > 0) {
+              newData.target_audience_age_min = min < 16 ? 16 : min;
+              newData.target_audience_age_max = max > 90 ? 90 : max;
+            }
+          }
+
+          // Target Audience: Gender
+          if (flatData.gender) {
+            const gArr = Array.isArray(flatData.gender) ? flatData.gender : [flatData.gender];
+            const str = gArr.join(' ').toLowerCase();
+            if (str.includes('women') && !str.includes('men')) newData.target_audience_gender = 'women';
+            else if (str.includes('men') && !str.includes('women')) newData.target_audience_gender = 'men';
+            else newData.target_audience_gender = 'all';
+          }
+
+          // Flatten Arrays (Generic) for other fields
+          const arrayFields = ['business_type', 'focus_areas', 'primary_goals', 'key_metrics_to_track', 'preferred_content_types', 'content_themes'];
+          arrayFields.forEach(field => {
+            if (flatData[field] && Array.isArray(flatData[field])) {
+              flatData[field].forEach(val => {
+                if (!newData[field].includes(val)) newData[field].push(val);
+              });
+            }
+          });
+
+          return newData
+        })
+        setSmartSearchSuccess('Details autofilled! Review the form.')
+        setTimeout(() => setSmartSearchSuccess(''), 4000)
+      } else {
+        setSmartSearchError('Could not find enough info.')
+      }
+
+    } catch (err) {
+      console.error('Smart search error:', err)
+      setSmartSearchError('Search failed. Please try again.')
+    } finally {
+      setSmartSearching(false)
+    }
+  }
+
   const [showCompletion, setShowCompletion] = useState(false)
 
 
@@ -177,7 +443,7 @@ const Onboarding = () => {
   const handleColorSuggestionClick = (color, type) => {
     handleInputChange(type === 'primary' ? 'primary_color' : 'secondary_color', color)
   }
-  
+
   // State for "Other" input fields
   const [otherInputs, setOtherInputs] = useState({
     businessTypeOther: '',
@@ -207,7 +473,7 @@ const Onboarding = () => {
     buyerBehavior: false,
     other: false
   })
-  
+
   const { user, loading: authLoading, logout } = useAuth()
   const navigate = useNavigate()
 
@@ -216,9 +482,9 @@ const Onboarding = () => {
     const checkFormType = async () => {
       // PRIORITY 1: Check localStorage/sessionStorage first (most reliable)
       const savedFormType = localStorage.getItem('selected_onboarding_type') ||
-                           sessionStorage.getItem('selected_onboarding_type')
+        sessionStorage.getItem('selected_onboarding_type')
       const formSelected = localStorage.getItem('onboarding_form_selected') === 'true' ||
-                          sessionStorage.getItem('onboarding_form_selected') === 'true'
+        sessionStorage.getItem('onboarding_form_selected') === 'true'
 
       console.log('Priority 1: Checking storage for saved form type:', { savedFormType, formSelected })
 
@@ -279,7 +545,7 @@ const Onboarding = () => {
       setOnboardingFormSelected(false)
       setCheckingFormType(false)
     }
-    
+
     if (!authLoading && user) {
       // Only run checkFormType if we haven't already restored from storage
       if (!selectedFormType) {
@@ -302,9 +568,9 @@ const Onboarding = () => {
     // Check for saved form selection on mount and visibility change
     const checkSavedSelection = () => {
       const savedFormType = localStorage.getItem('selected_onboarding_type') ||
-                           sessionStorage.getItem('selected_onboarding_type')
+        sessionStorage.getItem('selected_onboarding_type')
       const formSelected = localStorage.getItem('onboarding_form_selected') === 'true' ||
-                          sessionStorage.getItem('onboarding_form_selected') === 'true'
+        sessionStorage.getItem('onboarding_form_selected') === 'true'
 
       console.log('Checking saved selection on mount/visibility:', { savedFormType, formSelected })
 
@@ -399,7 +665,7 @@ const Onboarding = () => {
 
   const steps = [
     'Basic Business Info',
-    'Business Description', 
+    'Business Description',
     'Brand & Contact',
     'Current Presence & Focus Areas',
     'Digital Marketing & Goals',
@@ -417,17 +683,17 @@ const Onboarding = () => {
     if (selectedFormType !== 'business') {
       return // Don't load business form data if not selected
     }
-    
+
     const savedFormData = localStorage.getItem('onboarding_form_data')
     const savedCurrentStep = localStorage.getItem('onboarding_current_step')
     const savedCompletedSteps = localStorage.getItem('onboarding_completed_steps')
-    
+
     console.log('Loading business form data from localStorage:', {
       savedFormData: savedFormData ? 'exists' : 'null',
       savedCurrentStep,
       savedCompletedSteps: savedCompletedSteps ? 'exists' : 'null'
     })
-    
+
     if (savedFormData) {
       try {
         const parsedData = JSON.parse(savedFormData)
@@ -441,7 +707,7 @@ const Onboarding = () => {
         console.error('Error parsing saved form data:', error)
       }
     }
-    
+
     if (savedCurrentStep) {
       const step = parseInt(savedCurrentStep, 10)
       console.log('Parsed saved current step:', step, 'from localStorage:', savedCurrentStep)
@@ -454,7 +720,7 @@ const Onboarding = () => {
     } else {
       console.log('No saved current step found, keeping default 0')
     }
-    
+
     if (savedCompletedSteps) {
       try {
         const parsedSteps = JSON.parse(savedCompletedSteps)
@@ -522,15 +788,15 @@ const Onboarding = () => {
 
 
   const businessTypes = [
-    'B2B', 'B2C', 'E-Commerce', 'SaaS', 'Restaurant', 
+    'B2B', 'B2C', 'E-Commerce', 'SaaS', 'Restaurant',
     'Service-based', 'Franchise', 'Marketplace', 'D2C', 'Other'
   ]
 
   const industries = [
-    'Technology/IT', 'Retail/E-commerce', 'Education/eLearning', 'Healthcare/Wellness', 
-    'Fashion/Apparel', 'Food & Beverage', 'Travel & Hospitality', 'Finance/Fintech/Insurance', 
-    'Construction/Infrastructure', 'Automobile/Mobility', 'Media/Entertainment/Creators', 
-    'Real Estate', 'Logistics/Supply Chain', 'Manufacturing/Industrial', 'Professional Services', 
+    'Technology/IT', 'Retail/E-commerce', 'Education/eLearning', 'Healthcare/Wellness',
+    'Fashion/Apparel', 'Food & Beverage', 'Travel & Hospitality', 'Finance/Fintech/Insurance',
+    'Construction/Infrastructure', 'Automobile/Mobility', 'Media/Entertainment/Creators',
+    'Real Estate', 'Logistics/Supply Chain', 'Manufacturing/Industrial', 'Professional Services',
     'Non-Profit/NGO/Social Enterprise', 'Others'
   ]
 
@@ -539,35 +805,35 @@ const Onboarding = () => {
   ]
 
   const goals = [
-    'Increase Sales', 'Brand Awareness', 'Website Traffic', 'Lead Generation', 
+    'Increase Sales', 'Brand Awareness', 'Website Traffic', 'Lead Generation',
     'Community Building', 'Customer Engagement', 'Other'
   ]
 
   const metrics = [
-    'Followers', 'Likes', 'Clicks', 'Engagement Rate', 'Leads', 'Shares', 
+    'Followers', 'Likes', 'Clicks', 'Engagement Rate', 'Leads', 'Shares',
     'Comments', 'Conversions', 'Website Traffic/Visitors', 'Not sure — let Emily decide', 'Other'
   ]
 
   const budgetRanges = [
-    '₹0–₹5,000', '₹5,000–₹10,000', '₹10,000–₹25,000', 
+    '₹0–₹5,000', '₹5,000–₹10,000', '₹10,000–₹25,000',
     '₹25,000–₹50,000', '₹50,000+'
   ]
 
 
   const contentTypes = [
-    'Image Posts', 'Reels', 'Carousels', 'Stories', 'Blogs', 'Videos', 
+    'Image Posts', 'Reels', 'Carousels', 'Stories', 'Blogs', 'Videos',
     'Live Sessions', 'Other'
   ]
 
   const contentThemes = [
-    'Product Features', 'Behind the Scenes', 'Customer Stories', 'Tips & Tricks', 
-    'Educational', 'Announcements', 'User-Generated Content', 'Inspirational', 
+    'Product Features', 'Behind the Scenes', 'Customer Stories', 'Tips & Tricks',
+    'Educational', 'Announcements', 'User-Generated Content', 'Inspirational',
     'Entertaining', 'Not sure', 'Others'
   ]
 
   const postingTimes = [
-    'Early Morning (6 AM – 9 AM)', 'Mid-Morning (9 AM – 12 PM)', 'Afternoon (12 PM – 3 PM)', 
-    'Late Afternoon (3 PM – 6 PM)', 'Evening (6 PM – 9 PM)', 'Late Night (9 PM – 12 AM)', 
+    'Early Morning (6 AM – 9 AM)', 'Mid-Morning (9 AM – 12 PM)', 'Afternoon (12 PM – 3 PM)',
+    'Late Afternoon (3 PM – 6 PM)', 'Evening (6 PM – 9 PM)', 'Late Night (9 PM – 12 AM)',
     'Weekdays', 'Weekends', 'Not sure — let Emily analyze and suggest', 'Other'
   ]
 
@@ -585,48 +851,48 @@ const Onboarding = () => {
   ]
 
   const brandVoices = [
-    'Professional', 'Conversational', 'Friendly', 'Bold', 'Playful', 
-    'Approachable/Trustworthy', 'Sophisticated/Elegant', 'Quirky/Offbeat', 
+    'Professional', 'Conversational', 'Friendly', 'Bold', 'Playful',
+    'Approachable/Trustworthy', 'Sophisticated/Elegant', 'Quirky/Offbeat',
     'Confident', 'Not sure yet'
   ]
 
   const brandTones = [
-    'Formal', 'Informal', 'Humorous', 'Inspirational', 'Empathetic', 
+    'Formal', 'Informal', 'Humorous', 'Inspirational', 'Empathetic',
     'Encouraging', 'Direct', 'Flexible'
   ]
 
   const timezones = [
-    'Asia/Kolkata', 'Asia/Dubai', 'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Singapore', 
-    'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'America/New_York', 
-    'America/Los_Angeles', 'America/Chicago', 'America/Toronto', 
+    'Asia/Kolkata', 'Asia/Dubai', 'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Singapore',
+    'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'America/New_York',
+    'America/Los_Angeles', 'America/Chicago', 'America/Toronto',
     'Australia/Sydney', 'Australia/Melbourne', 'Pacific/Auckland'
   ]
 
   const automationLevels = [
-    { 
-      value: 'Full Automation – I want Emily to do everything', 
-      label: 'Full Automation', 
-      description: 'I want Emily to do everything automatically' 
+    {
+      value: 'Full Automation – I want Emily to do everything',
+      label: 'Full Automation',
+      description: 'I want Emily to do everything automatically'
     },
-    { 
-      value: 'Suggestions Only – I will take action manually', 
-      label: 'Suggestions Only', 
-      description: 'I will take action manually based on Emily\'s suggestions' 
+    {
+      value: 'Suggestions Only – I will take action manually',
+      label: 'Suggestions Only',
+      description: 'I will take action manually based on Emily\'s suggestions'
     },
-    { 
-      value: 'Manual Approval Before Posting', 
-      label: 'Manual Approval', 
-      description: 'Emily creates content but I approve before posting' 
+    {
+      value: 'Manual Approval Before Posting',
+      label: 'Manual Approval',
+      description: 'Emily creates content but I approve before posting'
     },
-    { 
-      value: 'Hybrid (platform/content-based mix – specify later)', 
-      label: 'Hybrid Approach', 
-      description: 'Mix of automation and manual control (platform/content-based)' 
+    {
+      value: 'Hybrid (platform/content-based mix – specify later)',
+      label: 'Hybrid Approach',
+      description: 'Mix of automation and manual control (platform/content-based)'
     },
-    { 
-      value: 'Not sure – need help deciding', 
-      label: 'Not Sure', 
-      description: 'Need help deciding the best automation level' 
+    {
+      value: 'Not sure – need help deciding',
+      label: 'Not Sure',
+      description: 'Need help deciding the best automation level'
     }
   ]
 
@@ -635,31 +901,31 @@ const Onboarding = () => {
   ]
 
   const focusAreas = [
-    'SEO', 'Blog/Article Writing', 'Website Optimization/Copywriting', 
-    'Digital Marketing (Organic Growth)', 'Paid Advertising', 
-    'Email Marketing & Campaigns', 'YouTube/Video Marketing', 'Influencer Marketing', 
-    'PPC', 'Lead Generation Campaigns', 'Brand Awareness', 'Local SEO/Maps Presence', 
+    'SEO', 'Blog/Article Writing', 'Website Optimization/Copywriting',
+    'Digital Marketing (Organic Growth)', 'Paid Advertising',
+    'Email Marketing & Campaigns', 'YouTube/Video Marketing', 'Influencer Marketing',
+    'PPC', 'Lead Generation Campaigns', 'Brand Awareness', 'Local SEO/Maps Presence',
     'Customer Retargeting', 'Not Sure – Let Emily suggest the best path'
   ]
 
   const targetAudienceCategories = {
     ageGroups: [
-      'Teens (13–19)', 'College Students/Youth (18–24)', 'Young Professionals (25–35)', 
+      'Teens (13–19)', 'College Students/Youth (18–24)', 'Young Professionals (25–35)',
       'Working Adults (30–50)', 'Seniors/Retirees (60+)', 'Kids/Children (0–12)'
     ],
     lifeStages: [
       'Students', 'Parents/Families', 'Newlyweds/Couples', 'Homeowners/Renters', 'Retired Individuals', 'Other (please specify)'
     ],
     professionalTypes: [
-      'Business Owners/Entrepreneurs', 'Corporate Clients/B2B Buyers', 'Freelancers/Creators', 
+      'Business Owners/Entrepreneurs', 'Corporate Clients/B2B Buyers', 'Freelancers/Creators',
       'Government Employees', 'Educators/Trainers', 'Job Seekers/Career Switchers', 'Writers and Journalists', 'Other (please specify)'
     ],
     lifestyleInterests: [
-      'Fitness Enthusiasts', 'Outdoor/Adventure Lovers', 'Fashion/Beauty Conscious', 
+      'Fitness Enthusiasts', 'Outdoor/Adventure Lovers', 'Fashion/Beauty Conscious',
       'Health-Conscious/Wellness Seekers', 'Pet Owners', 'Tech Enthusiasts/Gamers', 'Travelers/Digital Nomads', 'Other (please specify)'
     ],
     buyerBehavior: [
-      'Premium Buyers/High-Income Consumers', 'Budget-Conscious Shoppers', 'Impulse Buyers', 
+      'Premium Buyers/High-Income Consumers', 'Budget-Conscious Shoppers', 'Impulse Buyers',
       'Ethical/Sustainable Shoppers', 'Frequent Online Buyers', 'Other (please specify)'
     ],
     other: ['Not Sure', 'Other (please specify)']
@@ -676,7 +942,7 @@ const Onboarding = () => {
   const handleArrayChange = (field, value, checked) => {
     setFormData(prev => ({
       ...prev,
-      [field]: checked 
+      [field]: checked
         ? [...prev[field], value]
         : prev[field].filter(item => item !== value)
     }))
@@ -714,8 +980,8 @@ const Onboarding = () => {
         const hasUVP = formData.unique_value_proposition && String(formData.unique_value_proposition).trim().length > 0
         return hasBusinessDesc && hasUVP && hasAgeRange && hasGender
       case 2: // Brand & Contact
-        return formData.brand_voice && formData.brand_tone && formData.phone_number && 
-               formData.street_address && formData.city && formData.state && formData.country
+        return formData.brand_voice && formData.brand_tone && formData.phone_number &&
+          formData.street_address && formData.city && formData.state && formData.country
       case 3: // Current Presence & Focus Areas
         // If Website is selected, website_url is required
         if (formData.current_presence.includes('Website') && !formData.website_url) {
@@ -723,8 +989,8 @@ const Onboarding = () => {
         }
         return true
       case 4: // Digital Marketing & Goals
-        return formData.social_media_platforms.length > 0 && formData.primary_goals.length > 0 && 
-               formData.key_metrics_to_track.length > 0
+        return formData.social_media_platforms.length > 0 && formData.primary_goals.length > 0 &&
+          formData.key_metrics_to_track.length > 0
       case 5: // Content Strategy
         return formData.preferred_content_types.length > 0 && formData.content_themes.length > 0
       case 6: // Market & Competition
@@ -732,8 +998,8 @@ const Onboarding = () => {
       case 7: // Campaign Planning
         return formData.top_performing_content_types.length > 0 && formData.best_time_to_post.length > 0
       case 8: // Performance & Customer
-        return formData.hashtags_that_work_well && 
-               formData.customer_pain_points && formData.typical_customer_journey
+        return formData.hashtags_that_work_well &&
+          formData.customer_pain_points && formData.typical_customer_journey
       case 9: // Automation & Platform
         return formData.automation_level
       case 10: // Review & Submit
@@ -746,17 +1012,17 @@ const Onboarding = () => {
   // Check if a step is accessible based on data entered
   const isStepAccessible = (stepIndex) => {
     if (stepIndex === 0) return true
-    
+
     // Allow current step
     if (stepIndex === currentStep) return true
-    
+
     // Allow any step that has data
     if (hasStepData(stepIndex)) return true
-    
+
     // Allow next step after the highest step with data, but not too far ahead
     const highestStepWithData = getHighestStepWithData()
     if (stepIndex === highestStepWithData + 1 && stepIndex <= currentStep + 1) return true
-    
+
     return false
   }
 
@@ -784,13 +1050,13 @@ const Onboarding = () => {
         const hasUVP = formData.unique_value_proposition && String(formData.unique_value_proposition).trim().length > 0
         return hasBusinessDesc && hasUVP && hasAgeRange && hasGender
       case 2: // Brand & Contact
-        return formData.brand_voice && formData.brand_tone && formData.phone_number && 
-               formData.street_address && formData.city && formData.state && formData.country
+        return formData.brand_voice && formData.brand_tone && formData.phone_number &&
+          formData.street_address && formData.city && formData.state && formData.country
       case 3: // Current Presence & Focus Areas
         return formData.current_presence.length > 0 || formData.focus_areas.length > 0
       case 4: // Digital Marketing & Goals
-        return formData.social_media_platforms.length > 0 && formData.primary_goals.length > 0 && 
-               formData.key_metrics_to_track.length > 0
+        return formData.social_media_platforms.length > 0 && formData.primary_goals.length > 0 &&
+          formData.key_metrics_to_track.length > 0
       case 5: // Content Strategy
         return formData.preferred_content_types.length > 0 && formData.content_themes.length > 0
       case 6: // Market & Competition
@@ -798,8 +1064,8 @@ const Onboarding = () => {
       case 7: // Campaign Planning
         return formData.top_performing_content_types.length > 0 && formData.best_time_to_post.length > 0
       case 8: // Performance & Customer
-        return formData.hashtags_that_work_well && 
-               formData.customer_pain_points && formData.typical_customer_journey
+        return formData.hashtags_that_work_well &&
+          formData.customer_pain_points && formData.typical_customer_journey
       case 9: // Automation & Platform
         return formData.automation_level
       case 10: // Review & Submit
@@ -836,7 +1102,7 @@ const Onboarding = () => {
     console.log('nextStep called, currentStep:', currentStep)
     console.log('validateCurrentStep():', validateCurrentStep())
     console.log('formData:', formData)
-    
+
     if (validateCurrentStep()) {
       // Mark current step as completed
       console.log('Marking step as completed:', currentStep)
@@ -866,7 +1132,7 @@ const Onboarding = () => {
           stepsWithData.push(i)
         }
       }
-      
+
       if (stepsWithData.length > 0) {
         console.log('Found steps with data:', stepsWithData)
         setCompletedSteps(prev => {
@@ -876,7 +1142,7 @@ const Onboarding = () => {
         })
       }
     }, 100) // Small delay to let initial load complete
-    
+
     return () => clearTimeout(timeoutId)
   }, [formData, steps.length])
 
@@ -890,17 +1156,17 @@ const Onboarding = () => {
     console.log('goToStep called with:', stepIndex)
     console.log('isStepAccessible:', isStepAccessible(stepIndex))
     console.log('hasStepData for step', stepIndex, ':', hasStepData(stepIndex))
-    
+
     if (stepIndex >= 0 && stepIndex < steps.length) {
       // Check if user can navigate to this step
       if (isStepAccessible(stepIndex)) {
         console.log('Navigating to step:', stepIndex)
-        
+
         // Set flag if user manually navigates to step 0
         if (stepIndex === 0) {
           setUserNavigatedToStep0(true)
         }
-        
+
         setCurrentStep(stepIndex)
         setError('')
       } else {
@@ -999,15 +1265,137 @@ const Onboarding = () => {
       case 0:
         return (
           <div className="space-y-6">
+
+            {/* File Upload Area for Autofill */}
+            <div className={`p-4 sm:p-5 border-2 border-dashed rounded-xl transition-all ${uploadingDoc
+              ? 'border-pink-500 bg-pink-50/10'
+              : 'border-gray-600 hover:border-pink-500 bg-gray-800/50'
+              }`}>
+              <div className="flex flex-col items-center justify-center text-center">
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center mb-3 ${'bg-gray-700 text-pink-400'
+                  }`}>
+                  {uploadingDoc ? (
+                    <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-2 border-current border-t-transparent"></div>
+                  ) : (
+                    <Upload className="w-5 h-5 sm:w-6 sm:h-6" />
+                  )}
+                </div>
+
+                <h3 className="text-sm sm:text-base font-semibold mb-1 text-gray-200">
+                  {uploadingDoc ? 'Analyzing document...' : 'Fast-track your setup'}
+                </h3>
+
+                <p className="text-xs sm:text-sm mb-4 max-w-xs mx-auto text-gray-400">
+                  Upload your Company Profile, Pitch Deck, or Website content to autofill this form.
+                </p>
+
+                <div className="relative">
+                  <input
+                    type="file"
+                    id="doc-upload-business"
+                    className="hidden"
+                    accept=".pdf,.docx,.txt"
+                    onChange={handleDocUpload}
+                    disabled={uploadingDoc}
+                  />
+                  <label
+                    htmlFor="doc-upload-business"
+                    className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${uploadingDoc
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-pink-600 text-white hover:bg-pink-700 shadow-md hover:shadow-lg'
+                      }`}
+                  >
+                    Upload Document
+                  </label>
+                </div>
+
+                {docUploadError && (
+                  <p className="mt-3 text-xs sm:text-sm text-red-500 font-medium animate-fade-in">
+                    {docUploadError}
+                  </p>
+                )}
+
+                {docUploadSuccess && (
+                  <p className="mt-3 text-xs sm:text-sm text-green-500 font-medium animate-fade-in flex items-center justify-center gap-1">
+                    <Check className="w-3 h-3 sm:w-4 sm:h-4" /> {docUploadSuccess}
+                  </p>
+                )}
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-200 mb-2">Business Name *</label>
-              <input
-                type="text"
-                value={formData.business_name}
-                onChange={(e) => handleInputChange('business_name', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="Enter your business name"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.business_name}
+                  onChange={(e) => {
+                    handleInputChange('business_name', e.target.value);
+                  }}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                  placeholder="Enter your business name"
+                />
+
+                {/* Autocomplete Dropdown */}
+                {autocompleteSuggestions.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {autocompleteSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion.place_id}
+                        type="button"
+                        onClick={() => {
+                          handleInputChange('business_name', suggestion.main_text);
+                          if (suggestion.secondary_text) {
+                            handleInputChange('location', suggestion.secondary_text); // Store location as well
+                          }
+                          // Store Google Place ID for enhanced lookup
+                          handleInputChange('google_place_id', suggestion.place_id);
+                          setAutocompleteSuggestions([]);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex flex-col"
+                      >
+                        <span className="font-medium text-gray-900">{suggestion.main_text}</span>
+                        <span className="text-xs text-gray-500">{suggestion.secondary_text}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* Smart Search Button */}
+              <div className="mt-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handleSmartSearch}
+                  disabled={!formData.business_name || smartSearching}
+                  className={`text-xs sm:text-sm flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors ${!formData.business_name
+                    ? 'text-gray-500 cursor-not-allowed bg-gray-800'
+                    : smartSearching
+                      ? 'text-pink-400 bg-pink-900/20 cursor-wait'
+                      : 'text-pink-400 hover:text-pink-300 hover:bg-pink-900/30 bg-pink-900/10'
+                    }`}
+                >
+                  {smartSearching ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-current border-t-transparent"></div>
+                      {loadingMessage || 'Searching web...'}
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-3 h-3 sm:w-4 sm:h-4" />
+                      Autofill with Smart Search
+                    </>
+                  )}
+                </button>
+
+                {smartSearchError && (
+                  <span className="text-xs text-red-400 animate-fade-in">{smartSearchError}</span>
+                )}
+                {smartSearchSuccess && (
+                  <span className="text-xs text-green-400 animate-fade-in flex items-center gap-1">
+                    <Check className="w-3 h-3" /> {smartSearchSuccess}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div>
@@ -1074,7 +1462,7 @@ const Onboarding = () => {
             <div>
               <label className="block text-sm font-medium text-gray-200 mb-2">
                 Business Description *
-                <InfoTooltip 
+                <InfoTooltip
                   content="Describe your business in detail - what you offer, who your customers are, and how your products or services work. This helps Emily understand your brand and create tailored marketing content."
                   className="ml-2"
                 />
@@ -1136,245 +1524,245 @@ const Onboarding = () => {
               </div>
             </div>
 
-             <div>
-               <label className="block text-sm font-medium text-gray-200 mb-2">Target Audience Age *</label>
-               <div className="space-y-4">
-                 {/* Age Range Card */}
-                 <div className="border border-gray-200 rounded-lg p-4">
-                   <label className="block text-sm font-medium text-gray-200 mb-4">
-                     Age Range <span className="text-black">*</span>
-                   </label>
-                   <DualRangeSlider
-                     min={16}
-                     max={90}
-                     minValue={formData.target_audience_age_min || 16}
-                     maxValue={formData.target_audience_age_max || 90}
-                     onChange={({ min, max }) => {
-                       handleInputChange('target_audience_age_min', Number(min))
-                       handleInputChange('target_audience_age_max', Number(max))
-                     }}
-                   />
-                 </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-200 mb-2">Target Audience Age *</label>
+              <div className="space-y-4">
+                {/* Age Range Card */}
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-gray-200 mb-4">
+                    Age Range <span className="text-black">*</span>
+                  </label>
+                  <DualRangeSlider
+                    min={16}
+                    max={90}
+                    minValue={formData.target_audience_age_min || 16}
+                    maxValue={formData.target_audience_age_max || 90}
+                    onChange={({ min, max }) => {
+                      handleInputChange('target_audience_age_min', Number(min))
+                      handleInputChange('target_audience_age_max', Number(max))
+                    }}
+                  />
+                </div>
 
 
-                 {/* Target Audience Cards in 2-column layout */}
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   {/* Life Stage / Roles Card */}
-                   <div className="border border-gray-200 rounded-lg">
-                   <button
-                     type="button"
-                     onClick={() => toggleCard('lifeStages')}
-                     className="w-full px-4 py-3 flex items-center justify-between transition-colors relative hover:bg-gray-700" 
-                   >
-                     <span className="text-sm font-medium text-gray-200">Life Stage / Roles <span className="text-gray-200 text-xs">(Optional)</span></span>
-                     <div className="flex items-center space-x-2">
-                       <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
-                         {getSelectedCount('target_audience_life_stages')}
-                       </span>
-                       <svg 
-                         className={`w-4 h-4 text-gray-200 transition-transform ${expandedCards.lifeStages ? 'rotate-180' : ''}`}
-                         fill="none" 
-                         stroke="currentColor" 
-                         viewBox="0 0 24 24"
-                       >
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                       </svg>
-                     </div>
-                   </button>
-                   {expandedCards.lifeStages && (
-                     <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
-                         {targetAudienceCategories.lifeStages.map(stage => (
-                           <label key={stage} className="flex items-center space-x-2">
-                             <input
-                               type="checkbox"
-                               checked={formData.target_audience_life_stages.includes(stage)}
-                               onChange={(e) => handleArrayChange('target_audience_life_stages', stage, e.target.checked)}
-                               className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                             />
-                             <span className="text-xs xs:text-sm text-gray-200 break-words">{stage}</span>
-                           </label>
-                         ))}
-                       </div>
-                       {formData.target_audience_life_stages.includes('Other (please specify)') && (
-                         <div className="mt-3">
-                           <input
-                             type="text"
-                             value={otherInputs.lifeStagesOther}
-                             onChange={(e) => handleOtherInputChange('lifeStagesOther', e.target.value)}
-                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                             placeholder="Please specify life stage/role"
-                           />
-                         </div>
-                       )}
-                     </div>
-                   )}
-                   </div>
+                {/* Target Audience Cards in 2-column layout */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Life Stage / Roles Card */}
+                  <div className="border border-gray-200 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => toggleCard('lifeStages')}
+                      className="w-full px-4 py-3 flex items-center justify-between transition-colors relative hover:bg-gray-700"
+                    >
+                      <span className="text-sm font-medium text-gray-200">Life Stage / Roles <span className="text-gray-200 text-xs">(Optional)</span></span>
+                      <div className="flex items-center space-x-2">
+                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
+                          {getSelectedCount('target_audience_life_stages')}
+                        </span>
+                        <svg
+                          className={`w-4 h-4 text-gray-200 transition-transform ${expandedCards.lifeStages ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </button>
+                    {expandedCards.lifeStages && (
+                      <div className="px-4 pb-4 border-t border-gray-100">
+                        <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
+                          {targetAudienceCategories.lifeStages.map(stage => (
+                            <label key={stage} className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={formData.target_audience_life_stages.includes(stage)}
+                                onChange={(e) => handleArrayChange('target_audience_life_stages', stage, e.target.checked)}
+                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                              />
+                              <span className="text-xs xs:text-sm text-gray-200 break-words">{stage}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {formData.target_audience_life_stages.includes('Other (please specify)') && (
+                          <div className="mt-3">
+                            <input
+                              type="text"
+                              value={otherInputs.lifeStagesOther}
+                              onChange={(e) => handleOtherInputChange('lifeStagesOther', e.target.value)}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                              placeholder="Please specify life stage/role"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                   {/* Professional / Business Type Card */}
-                   <div className="border border-gray-200 rounded-lg">
-                   <button
-                     type="button"
-                     onClick={() => toggleCard('professionalTypes')}
-                     className="w-full px-4 py-3 flex items-center justify-between transition-colors relative hover:bg-gray-700"
-                   >
-                     <span className="text-sm font-medium text-gray-200">Professional / Business Type <span className="text-gray-200 text-xs">(Optional)</span></span>
-                     <div className="flex items-center space-x-2">
-                       <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
-                         {getSelectedCount('target_audience_professional_types')}
-                       </span>
-                       <svg 
-                         className={`w-4 h-4 text-gray-200 transition-transform ${expandedCards.professionalTypes ? 'rotate-180' : ''}`}
-                         fill="none" 
-                         stroke="currentColor" 
-                         viewBox="0 0 24 24"
-                       >
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                       </svg>
-                     </div>
-                   </button>
-                   {expandedCards.professionalTypes && (
-                     <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
-                         {targetAudienceCategories.professionalTypes.map(type => (
-                           <label key={type} className="flex items-center space-x-2">
-                             <input
-                               type="checkbox"
-                               checked={formData.target_audience_professional_types.includes(type)}
-                               onChange={(e) => handleArrayChange('target_audience_professional_types', type, e.target.checked)}
-                               className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                             />
-                             <span className="text-xs xs:text-sm text-gray-200 break-words">{type}</span>
-                           </label>
-                         ))}
-                       </div>
-                       {formData.target_audience_professional_types.includes('Other (please specify)') && (
-                         <div className="mt-3">
-                           <input
-                             type="text"
-                             value={otherInputs.professionalTypesOther}
-                             onChange={(e) => handleOtherInputChange('professionalTypesOther', e.target.value)}
-                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                             placeholder="Please specify professional/business type"
-                           />
-                         </div>
-                       )}
-                     </div>
-                   )}
-                   </div>
+                  {/* Professional / Business Type Card */}
+                  <div className="border border-gray-200 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => toggleCard('professionalTypes')}
+                      className="w-full px-4 py-3 flex items-center justify-between transition-colors relative hover:bg-gray-700"
+                    >
+                      <span className="text-sm font-medium text-gray-200">Professional / Business Type <span className="text-gray-200 text-xs">(Optional)</span></span>
+                      <div className="flex items-center space-x-2">
+                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
+                          {getSelectedCount('target_audience_professional_types')}
+                        </span>
+                        <svg
+                          className={`w-4 h-4 text-gray-200 transition-transform ${expandedCards.professionalTypes ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </button>
+                    {expandedCards.professionalTypes && (
+                      <div className="px-4 pb-4 border-t border-gray-100">
+                        <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
+                          {targetAudienceCategories.professionalTypes.map(type => (
+                            <label key={type} className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={formData.target_audience_professional_types.includes(type)}
+                                onChange={(e) => handleArrayChange('target_audience_professional_types', type, e.target.checked)}
+                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                              />
+                              <span className="text-xs xs:text-sm text-gray-200 break-words">{type}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {formData.target_audience_professional_types.includes('Other (please specify)') && (
+                          <div className="mt-3">
+                            <input
+                              type="text"
+                              value={otherInputs.professionalTypesOther}
+                              onChange={(e) => handleOtherInputChange('professionalTypesOther', e.target.value)}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                              placeholder="Please specify professional/business type"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                   {/* Lifestyle & Interests Card */}
-                   <div className="border border-gray-200 rounded-lg">
-                   <button
-                     type="button"
-                     onClick={() => toggleCard('lifestyleInterests')}
-                     className="w-full px-4 py-3 flex items-center justify-between transition-colors relative hover:bg-gray-700"
-                   >
-                     <span className="text-sm font-medium text-gray-200">Lifestyle & Interests <span className="text-gray-200 text-xs">(Optional)</span></span>
-                     <div className="flex items-center space-x-2">
-                       <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
-                         {getSelectedCount('target_audience_lifestyle_interests')}
-                       </span>
-                       <svg 
-                         className={`w-4 h-4 text-gray-200 transition-transform ${expandedCards.lifestyleInterests ? 'rotate-180' : ''}`}
-                         fill="none" 
-                         stroke="currentColor" 
-                         viewBox="0 0 24 24"
-                       >
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                       </svg>
-                     </div>
-                   </button>
-                   {expandedCards.lifestyleInterests && (
-                     <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
-                         {targetAudienceCategories.lifestyleInterests.map(interest => (
-                           <label key={interest} className="flex items-center space-x-2">
-                             <input
-                               type="checkbox"
-                               checked={formData.target_audience_lifestyle_interests.includes(interest)}
-                               onChange={(e) => handleArrayChange('target_audience_lifestyle_interests', interest, e.target.checked)}
-                               className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                             />
-                             <span className="text-xs xs:text-sm text-gray-200 break-words">{interest}</span>
-                           </label>
-                         ))}
-                       </div>
-                       {formData.target_audience_lifestyle_interests.includes('Other (please specify)') && (
-                         <div className="mt-3">
-                           <input
-                             type="text"
-                             value={otherInputs.lifestyleInterestsOther}
-                             onChange={(e) => handleOtherInputChange('lifestyleInterestsOther', e.target.value)}
-                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                             placeholder="Please specify lifestyle & interest"
-                           />
-                         </div>
-                       )}
-                     </div>
-                   )}
-                   </div>
+                  {/* Lifestyle & Interests Card */}
+                  <div className="border border-gray-200 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => toggleCard('lifestyleInterests')}
+                      className="w-full px-4 py-3 flex items-center justify-between transition-colors relative hover:bg-gray-700"
+                    >
+                      <span className="text-sm font-medium text-gray-200">Lifestyle & Interests <span className="text-gray-200 text-xs">(Optional)</span></span>
+                      <div className="flex items-center space-x-2">
+                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
+                          {getSelectedCount('target_audience_lifestyle_interests')}
+                        </span>
+                        <svg
+                          className={`w-4 h-4 text-gray-200 transition-transform ${expandedCards.lifestyleInterests ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </button>
+                    {expandedCards.lifestyleInterests && (
+                      <div className="px-4 pb-4 border-t border-gray-100">
+                        <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
+                          {targetAudienceCategories.lifestyleInterests.map(interest => (
+                            <label key={interest} className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={formData.target_audience_lifestyle_interests.includes(interest)}
+                                onChange={(e) => handleArrayChange('target_audience_lifestyle_interests', interest, e.target.checked)}
+                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                              />
+                              <span className="text-xs xs:text-sm text-gray-200 break-words">{interest}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {formData.target_audience_lifestyle_interests.includes('Other (please specify)') && (
+                          <div className="mt-3">
+                            <input
+                              type="text"
+                              value={otherInputs.lifestyleInterestsOther}
+                              onChange={(e) => handleOtherInputChange('lifestyleInterestsOther', e.target.value)}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                              placeholder="Please specify lifestyle & interest"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                   {/* Buyer Behavior Card */}
-                   <div className="border border-gray-200 rounded-lg">
-                   <button
-                     type="button"
-                     onClick={() => toggleCard('buyerBehavior')}
-                     className="w-full px-4 py-3 flex items-center justify-between transition-colors relative hover:bg-gray-700"
-                   >
-                     <span className="text-sm font-medium text-gray-200">Buyer Behavior <span className="text-gray-200 text-xs">(Optional)</span></span>
-                     <div className="flex items-center space-x-2">
-                       <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
-                         {getSelectedCount('target_audience_buyer_behavior')}
-                       </span>
-                       <svg 
-                         className={`w-4 h-4 text-gray-200 transition-transform ${expandedCards.buyerBehavior ? 'rotate-180' : ''}`}
-                         fill="none" 
-                         stroke="currentColor" 
-                         viewBox="0 0 24 24"
-                       >
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                       </svg>
-                     </div>
-                   </button>
-                   {expandedCards.buyerBehavior && (
-                     <div className="px-4 pb-4 border-t border-gray-100">
-                       <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
-                         {targetAudienceCategories.buyerBehavior.map(behavior => (
-                           <label key={behavior} className="flex items-center space-x-2">
-                             <input
-                               type="checkbox"
-                               checked={formData.target_audience_buyer_behavior.includes(behavior)}
-                               onChange={(e) => handleArrayChange('target_audience_buyer_behavior', behavior, e.target.checked)}
-                               className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                             />
-                             <span className="text-xs xs:text-sm text-gray-200 break-words">{behavior}</span>
-                           </label>
-                         ))}
-                       </div>
-                       {formData.target_audience_buyer_behavior.includes('Other (please specify)') && (
-                         <div className="mt-3">
-                           <input
-                             type="text"
-                             value={otherInputs.buyerBehaviorOther}
-                             onChange={(e) => handleOtherInputChange('buyerBehaviorOther', e.target.value)}
-                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                             placeholder="Please specify buyer behavior"
-                           />
-                         </div>
-                       )}
-                     </div>
-                   )}
-                   </div>
-                 </div>
+                  {/* Buyer Behavior Card */}
+                  <div className="border border-gray-200 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => toggleCard('buyerBehavior')}
+                      className="w-full px-4 py-3 flex items-center justify-between transition-colors relative hover:bg-gray-700"
+                    >
+                      <span className="text-sm font-medium text-gray-200">Buyer Behavior <span className="text-gray-200 text-xs">(Optional)</span></span>
+                      <div className="flex items-center space-x-2">
+                        <span className="w-6 h-6 bg-pink-100 text-pink-600 rounded-full flex items-center justify-center text-xs font-medium">
+                          {getSelectedCount('target_audience_buyer_behavior')}
+                        </span>
+                        <svg
+                          className={`w-4 h-4 text-gray-200 transition-transform ${expandedCards.buyerBehavior ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </button>
+                    {expandedCards.buyerBehavior && (
+                      <div className="px-4 pb-4 border-t border-gray-100">
+                        <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 pt-3">
+                          {targetAudienceCategories.buyerBehavior.map(behavior => (
+                            <label key={behavior} className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={formData.target_audience_buyer_behavior.includes(behavior)}
+                                onChange={(e) => handleArrayChange('target_audience_buyer_behavior', behavior, e.target.checked)}
+                                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                              />
+                              <span className="text-xs xs:text-sm text-gray-200 break-words">{behavior}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {formData.target_audience_buyer_behavior.includes('Other (please specify)') && (
+                          <div className="mt-3">
+                            <input
+                              type="text"
+                              value={otherInputs.buyerBehaviorOther}
+                              onChange={(e) => handleOtherInputChange('buyerBehaviorOther', e.target.value)}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                              placeholder="Please specify buyer behavior"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-               </div>
-             </div>
+              </div>
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-200 mb-2">
                 Unique Value Proposition *
-                <InfoTooltip 
+                <InfoTooltip
                   content="Highlight your business's main strength or advantage that sets you apart. This helps the AI emphasize your key value in marketing content."
                   className="ml-2"
                 />
@@ -1425,7 +1813,7 @@ const Onboarding = () => {
             {/* Brand Colors Section */}
             <div className="border-t border-gray-200 pt-6 mt-6">
               <h4 className="text-sm font-semibold text-gray-200 mb-4">Brand Colors</h4>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -1611,105 +1999,103 @@ const Onboarding = () => {
               formData.current_presence.includes('Instagram') ||
               formData.current_presence.includes('LinkedIn (Personal)') ||
               formData.current_presence.includes('YouTube')) && (
-              <div className={`mt-6 p-4 rounded-lg ${
-bg-gray-800
-              }`}>
-                <h4 className="text-sm font-medium text-gray-200 mb-4">Platform Details</h4>
-                <div className="space-y-4">
-                  {formData.current_presence.includes('Website') && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-200 mb-1">Website URL *</label>
-                      <input
-                        type="url"
-                        value={formData.website_url || ''}
-                        onChange={(e) => {
-                          let value = e.target.value;
-                          handleInputChange('website_url', value);
-                        }}
-                        onBlur={(e) => {
-                          let value = e.target.value;
-                          // Ensure https:// on blur if user hasn't added it
-                          if (value && !value.startsWith('http://') && !value.startsWith('https://')) {
-                            value = 'https://' + value;
+                <div className="mt-6 p-4 rounded-lg bg-gray-800">
+                  <h4 className="text-sm font-medium text-gray-200 mb-4">Platform Details</h4>
+                  <div className="space-y-4">
+                    {formData.current_presence.includes('Website') && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-200 mb-1">Website URL *</label>
+                        <input
+                          type="url"
+                          value={formData.website_url || ''}
+                          onChange={(e) => {
+                            let value = e.target.value;
                             handleInputChange('website_url', value);
-                          }
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                        placeholder="https://your-website.com"
-                        required
-                      />
-                      <p className="text-xs text-gray-200 mt-1">Must start with https://</p>
-                    </div>
-                  )}
-                  
-                  {formData.current_presence.includes('Facebook Page') && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-200 mb-1">Facebook Page Link</label>
-                      <input
-                        type="url"
-                        value={formData.facebook_page_name || ''}
-                        onChange={(e) => handleInputChange('facebook_page_name', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                        placeholder="e.g., facebook.com/your-business"
-                      />
-                    </div>
-                  )}
-                  
-                  {formData.current_presence.includes('Instagram') && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-200 mb-1">Instagram Profile Link</label>
-                      <input
-                        type="url"
-                        value={formData.instagram_profile_link || ''}
-                        onChange={(e) => handleInputChange('instagram_profile_link', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                        placeholder="e.g., instagram.com/your-business"
-                      />
-                    </div>
-                  )}
-                  
-                  {formData.current_presence.includes('LinkedIn (Personal)') && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-200 mb-1">LinkedIn Company Page Link</label>
-                      <input
-                        type="url"
-                        value={formData.linkedin_company_link || ''}
-                        onChange={(e) => handleInputChange('linkedin_company_link', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                        placeholder="e.g., linkedin.com/company/your-business"
-                      />
-                    </div>
-                  )}
-                  
-                  {formData.current_presence.includes('X (formerly Twitter)') && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-200 mb-1">X (Twitter) Profile Link</label>
-                      <input
-                        type="url"
-                        value={formData.x_twitter_profile || ''}
-                        onChange={(e) => handleInputChange('x_twitter_profile', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                        placeholder="e.g., twitter.com/your-business"
-                      />
-                    </div>
-                  )}
-                  
-                  {formData.current_presence.includes('YouTube') && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-200 mb-1">YouTube Channel Link</label>
-                      <input
-                        type="url"
-                        value={formData.youtube_channel_link || ''}
-                        onChange={(e) => handleInputChange('youtube_channel_link', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                        placeholder="e.g., youtube.com/@your-business"
-                      />
-                    </div>
-                  )}
-                  
+                          }}
+                          onBlur={(e) => {
+                            let value = e.target.value;
+                            // Ensure https:// on blur if user hasn't added it
+                            if (value && !value.startsWith('http://') && !value.startsWith('https://')) {
+                              value = 'https://' + value;
+                              handleInputChange('website_url', value);
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                          placeholder="https://your-website.com"
+                          required
+                        />
+                        <p className="text-xs text-gray-200 mt-1">Must start with https://</p>
+                      </div>
+                    )}
+
+                    {formData.current_presence.includes('Facebook Page') && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-200 mb-1">Facebook Page Link</label>
+                        <input
+                          type="url"
+                          value={formData.facebook_page_name || ''}
+                          onChange={(e) => handleInputChange('facebook_page_name', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                          placeholder="e.g., facebook.com/your-business"
+                        />
+                      </div>
+                    )}
+
+                    {formData.current_presence.includes('Instagram') && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-200 mb-1">Instagram Profile Link</label>
+                        <input
+                          type="url"
+                          value={formData.instagram_profile_link || ''}
+                          onChange={(e) => handleInputChange('instagram_profile_link', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                          placeholder="e.g., instagram.com/your-business"
+                        />
+                      </div>
+                    )}
+
+                    {formData.current_presence.includes('LinkedIn (Personal)') && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-200 mb-1">LinkedIn Company Page Link</label>
+                        <input
+                          type="url"
+                          value={formData.linkedin_company_link || ''}
+                          onChange={(e) => handleInputChange('linkedin_company_link', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                          placeholder="e.g., linkedin.com/company/your-business"
+                        />
+                      </div>
+                    )}
+
+                    {formData.current_presence.includes('X (formerly Twitter)') && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-200 mb-1">X (Twitter) Profile Link</label>
+                        <input
+                          type="url"
+                          value={formData.x_twitter_profile || ''}
+                          onChange={(e) => handleInputChange('x_twitter_profile', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                          placeholder="e.g., twitter.com/your-business"
+                        />
+                      </div>
+                    )}
+
+                    {formData.current_presence.includes('YouTube') && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-200 mb-1">YouTube Channel Link</label>
+                        <input
+                          type="url"
+                          value={formData.youtube_channel_link || ''}
+                          onChange={(e) => handleInputChange('youtube_channel_link', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                          placeholder="e.g., youtube.com/@your-business"
+                        />
+                      </div>
+                    )}
+
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
             <div>
               <label className="block text-sm font-medium text-gray-200 mb-2">Focus Areas</label>
@@ -1826,7 +2212,7 @@ bg-gray-800
               <div>
                 <label className="block text-sm font-medium text-gray-200 mb-2">
                   Monthly Marketing Budget *
-                  <InfoTooltip 
+                  <InfoTooltip
                     content="Enter the approximate amount you plan to spend on marketing each month. This helps Emily create campaigns that fit your budget."
                     className="ml-2"
                   />
@@ -1924,7 +2310,7 @@ bg-gray-800
             <div>
               <label className="block text-sm font-medium text-gray-200 mb-2">
                 Products/Services *
-                <InfoTooltip 
+                <InfoTooltip
                   content="Provide a detailed description of one product or service you want to promote with this AI. Include features, benefits, and target customers so the AI can craft accurate content."
                   className="ml-2"
                 />
@@ -1974,7 +2360,7 @@ bg-gray-800
             <div>
               <label className="block text-sm font-medium text-gray-200 mb-2">
                 Planned Promotions/Campaigns *
-                <InfoTooltip 
+                <InfoTooltip
                   content="Share any upcoming promotions or campaigns you're planning. This helps Emily align content and strategy with your marketing goals."
                   className="ml-2"
                 />
@@ -2052,7 +2438,7 @@ bg-gray-800
             <div>
               <label className="block text-sm font-medium text-gray-200 mb-2">
                 Most Successful Campaigns
-                <InfoTooltip 
+                <InfoTooltip
                   content="Mention past campaigns that performed well. This helps the AI understand what works best for your audience and replicate success."
                   className="ml-2"
                 />
@@ -2069,7 +2455,7 @@ bg-gray-800
             <div>
               <label className="block text-sm font-medium text-gray-200 mb-2">
                 Upload Post Media That Worked Well (Optional - Max 4)
-                <InfoTooltip 
+                <InfoTooltip
                   content="Upload up to 4 post media files from past campaigns that performed well. This helps Emily understand what visual content resonates with your audience."
                   className="ml-2"
                 />
@@ -2100,7 +2486,7 @@ bg-gray-800
             <div>
               <label className="block text-sm font-medium text-gray-200 mb-2">
                 Customer Pain Points *
-                <InfoTooltip 
+                <InfoTooltip
                   content="Describe the common problems or challenges your customers face. This helps Emily create content that addresses their needs effectively."
                   className="ml-2"
                 />
@@ -2117,7 +2503,7 @@ bg-gray-800
             <div>
               <label className="block text-sm font-medium text-gray-200 mb-2">
                 Typical Customer Journey *
-                <InfoTooltip 
+                <InfoTooltip
                   content="Explain how a customer usually discovers, considers, and buys your product or service. This helps the AI tailor content to each stage of the buying process."
                   className="ml-2"
                 />
@@ -2205,9 +2591,7 @@ bg-gray-800
       case 10:
         return (
           <div className="space-y-6">
-            <div className={`p-6 rounded-lg ${
-bg-gray-800
-            }`}>
+            <div className="p-6 rounded-lg bg-gray-800">
               <h4 className="font-semibold text-gray-200 mb-4">Review Your Information</h4>
               <div className="space-y-2 text-sm">
                 <p><strong>Business Name:</strong> {formData.business_name}</p>
@@ -2254,7 +2638,7 @@ bg-gray-800
   // REQUIRED: Show form selector if no form type selected - user MUST choose
   // Enhanced check: ensure both form type is selected AND properly persisted
   if (!selectedFormType || !onboardingFormSelected ||
-      (selectedFormType !== 'business' && selectedFormType !== 'creator')) {
+    (selectedFormType !== 'business' && selectedFormType !== 'creator')) {
     console.log('Showing form selector. selectedFormType:', selectedFormType, 'onboardingFormSelected:', onboardingFormSelected)
     return <OnboardingFormSelector onSelect={handleFormTypeSelect} />
   }
@@ -2288,7 +2672,7 @@ bg-gray-800
   // Show business form (existing Onboarding.jsx logic)
   return (
     <div className="min-h-screen flex flex-col bg-gray-900">
-        {/* Header */}
+      {/* Header */}
       <div className="shadow-sm border-b bg-gray-800 border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
@@ -2344,98 +2728,98 @@ bg-gray-800
         <div className="max-w-4xl mx-auto px-4 sm:px-6 w-full">
           {/* Welcome Section */}
 
-        {/* Progress Bar */}
-        <div className="mb-4 sm:mb-6 lg:mb-8">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <div className="flex items-center space-x-2 xs:space-x-3 sm:space-x-4">
-              <span className="text-xs xs:text-sm font-medium text-gray-200">
-                Step {currentStep + 1} of {steps.length}
-              </span>
-              <span className="text-xs text-gray-200">
-                {Math.round(((currentStep + 1) / steps.length) * 100)}% Complete
-              </span>
-            </div>
-            {/* Auto-saved Indicator */}
-            <div className="flex items-center text-xs text-gray-200">
-              <div className="w-2 h-2 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full mr-1 xs:mr-2 animate-pulse"></div>
-              <span className="font-medium">Auto-saved</span>
-            </div>
-          </div>
-          
-          
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className="bg-gradient-to-r from-pink-500 to-purple-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
-            ></div>
-          </div>
-        </div>
-
-        {/* Step Content */}
-        <div className="rounded-xl shadow-lg p-3 xs:p-4 sm:p-6 lg:p-8 mb-4 sm:mb-6 lg:mb-8 bg-gray-800">
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-3 sm:px-4 py-2 sm:py-3 rounded-lg mb-4 sm:mb-6">
-              <p className="text-sm sm:text-base">{error}</p>
-            </div>
-          )}
-
-          {/* Step Lock Warning */}
-          {currentStep > 0 && !isStepAccessible(currentStep) && (
-            <div className="bg-amber-50 border border-amber-200 text-amber-600 px-3 sm:px-4 py-2 sm:py-3 rounded-lg mb-4 sm:mb-6">
-              <div className="flex items-center">
-                <Check className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 mr-2 flex-shrink-0" />
-                <p className="text-sm sm:text-base">
-                  This step is locked. Please complete the previous steps to continue.
-                </p>
+          {/* Progress Bar */}
+          <div className="mb-4 sm:mb-6 lg:mb-8">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex items-center space-x-2 xs:space-x-3 sm:space-x-4">
+                <span className="text-xs xs:text-sm font-medium text-gray-200">
+                  Step {currentStep + 1} of {steps.length}
+                </span>
+                <span className="text-xs text-gray-200">
+                  {Math.round(((currentStep + 1) / steps.length) * 100)}% Complete
+                </span>
+              </div>
+              {/* Auto-saved Indicator */}
+              <div className="flex items-center text-xs text-gray-200">
+                <div className="w-2 h-2 bg-gradient-to-r from-pink-500 to-purple-600 rounded-full mr-1 xs:mr-2 animate-pulse"></div>
+                <span className="font-medium">Auto-saved</span>
               </div>
             </div>
-          )}
 
-          {renderStep()}
-        </div>
 
-        {/* Navigation */}
-        <div className="flex justify-between items-center gap-2 xs:gap-3">
-          <button
-            onClick={prevStep}
-            disabled={currentStep === 0}
-            className="flex items-center justify-center px-3 xs:px-4 py-2 xs:py-2.5 bg-gray-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 transition-colors min-w-[80px] xs:min-w-[100px]"
-          >
-            <ArrowLeft className="w-3 h-3 xs:w-4 xs:h-4 mr-1 xs:mr-2" />
-            <span className="text-xs xs:text-sm">Previous</span>
-          </button>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-gradient-to-r from-pink-500 to-purple-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
+              ></div>
+            </div>
+          </div>
 
-          {/* Next/Submit Button */}
-          {currentStep === steps.length - 1 ? (
+          {/* Step Content */}
+          <div className="rounded-xl shadow-lg p-3 xs:p-4 sm:p-6 lg:p-8 mb-4 sm:mb-6 lg:mb-8 bg-gray-800">
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 px-3 sm:px-4 py-2 sm:py-3 rounded-lg mb-4 sm:mb-6">
+                <p className="text-sm sm:text-base">{error}</p>
+              </div>
+            )}
+
+            {/* Step Lock Warning */}
+            {currentStep > 0 && !isStepAccessible(currentStep) && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-600 px-3 sm:px-4 py-2 sm:py-3 rounded-lg mb-4 sm:mb-6">
+                <div className="flex items-center">
+                  <Check className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 mr-2 flex-shrink-0" />
+                  <p className="text-sm sm:text-base">
+                    This step is locked. Please complete the previous steps to continue.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {renderStep()}
+          </div>
+
+          {/* Navigation */}
+          <div className="flex justify-between items-center gap-2 xs:gap-3">
             <button
-              onClick={handleSubmit}
-              disabled={isSubmitting || !validateCurrentStep()}
-              className="flex items-center justify-center px-3 xs:px-4 py-2 xs:py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all min-w-[100px] xs:min-w-[140px]"
+              onClick={prevStep}
+              disabled={currentStep === 0}
+              className="flex items-center justify-center px-3 xs:px-4 py-2 xs:py-2.5 bg-gray-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 transition-colors min-w-[80px] xs:min-w-[100px]"
             >
-              {isSubmitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-3 w-3 xs:h-4 xs:w-4 border-b-2 border-white mr-1 xs:mr-2"></div>
-                  <span className="text-xs xs:text-sm">Submitting...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="w-3 h-3 xs:w-4 xs:h-4 mr-1 xs:mr-2" />
-                  <span className="text-xs xs:text-sm">Complete</span>
-                </>
-              )}
+              <ArrowLeft className="w-3 h-3 xs:w-4 xs:h-4 mr-1 xs:mr-2" />
+              <span className="text-xs xs:text-sm">Previous</span>
             </button>
-          ) : (
-            <button
-              onClick={nextStep}
-              disabled={!validateCurrentStep()}
-              className="flex items-center justify-center px-3 xs:px-4 py-2 xs:py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all min-w-[60px] xs:min-w-[80px]"
-            >
-              <span className="text-xs xs:text-sm">Next</span>
-              <ArrowRight className="w-3 h-3 xs:w-4 xs:h-4 ml-1 xs:ml-2" />
-            </button>
-          )}
-        </div>
+
+            {/* Next/Submit Button */}
+            {currentStep === steps.length - 1 ? (
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting || !validateCurrentStep()}
+                className="flex items-center justify-center px-3 xs:px-4 py-2 xs:py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all min-w-[100px] xs:min-w-[140px]"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 xs:h-4 xs:w-4 border-b-2 border-white mr-1 xs:mr-2"></div>
+                    <span className="text-xs xs:text-sm">Submitting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3 h-3 xs:w-4 xs:h-4 mr-1 xs:mr-2" />
+                    <span className="text-xs xs:text-sm">Complete</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={nextStep}
+                disabled={!validateCurrentStep()}
+                className="flex items-center justify-center px-3 xs:px-4 py-2 xs:py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:from-pink-600 hover:to-purple-700 transition-all min-w-[60px] xs:min-w-[80px]"
+              >
+                <span className="text-xs xs:text-sm">Next</span>
+                <ArrowRight className="w-3 h-3 xs:w-4 xs:h-4 ml-1 xs:ml-2" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
