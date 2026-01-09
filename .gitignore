@@ -184,3 +184,7 @@ DEPLOYMENT_CHECKLIST.md
 # Local development files
 local/
 dev/
+
+# Rust/Tauri build artifacts
+frontend/src-tauri/target/
+frontend/src-tauri/Cargo.lock
