@@ -1,0 +1,11 @@
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/phf-981ef29343d8fdeb.d: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/lib.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/map.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/ordered_map.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/ordered_set.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/set.rs
+
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/libphf-981ef29343d8fdeb.rlib: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/lib.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/map.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/ordered_map.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/ordered_set.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/set.rs
+
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/libphf-981ef29343d8fdeb.rmeta: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/lib.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/map.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/ordered_map.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/ordered_set.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/set.rs
+
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/lib.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/map.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/ordered_map.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/ordered_set.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/phf-0.11.3/src/set.rs:

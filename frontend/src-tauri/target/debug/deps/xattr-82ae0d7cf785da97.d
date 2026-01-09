@@ -1,0 +1,11 @@
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/xattr-82ae0d7cf785da97.d: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/lib.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/error.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/sys/mod.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/util.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/sys/linux_macos.rs
+
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/libxattr-82ae0d7cf785da97.rlib: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/lib.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/error.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/sys/mod.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/util.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/sys/linux_macos.rs
+
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/libxattr-82ae0d7cf785da97.rmeta: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/lib.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/error.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/sys/mod.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/util.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/sys/linux_macos.rs
+
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/lib.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/error.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/sys/mod.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/util.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/xattr-1.6.1/src/sys/linux_macos.rs:

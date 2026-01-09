@@ -1,0 +1,11 @@
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/ipnet-2d15ae8d52ed3323.d: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/lib.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/ipext.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/ipnet.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/parser.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/mask.rs
+
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/libipnet-2d15ae8d52ed3323.rlib: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/lib.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/ipext.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/ipnet.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/parser.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/mask.rs
+
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/libipnet-2d15ae8d52ed3323.rmeta: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/lib.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/ipext.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/ipnet.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/parser.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/mask.rs
+
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/lib.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/ipext.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/ipnet.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/parser.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ipnet-2.11.0/src/mask.rs:

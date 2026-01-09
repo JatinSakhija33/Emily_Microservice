@@ -5,6 +5,17 @@
     "version": "1.0.0"
   },
   "tauri": {
+    "windows": [
+      {
+        "title": "ATSN AI",
+        "width": 1920,
+        "height": 1080,
+        "resizable": true,
+        "fullscreen": false,
+        "maximized": true,
+        "visible": true
+      }
+    ],
     "bundle": {
       "active": true,
       "targets": "all",
@@ -16,18 +27,12 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ]
-    },
-    "updater": {
-      "active": true,
-      "dialog": true,
-      "endpoints": [
-        "https://github.com/theathiestmonk/atsn-ai/releases/latest/download/latest.json"
-      ],
-      "pubkey": "MCowBQYDK2VwAyEAOwjaDLQM7ojYUm672IM6utxDfyK0m8MGwnQ1t5FGBDo="
     }
   },
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
-  }
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:8080"
+  },
+  "plugins": {}
 }

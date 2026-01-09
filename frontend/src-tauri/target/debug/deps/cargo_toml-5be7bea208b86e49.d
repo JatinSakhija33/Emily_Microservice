@@ -1,0 +1,10 @@
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/cargo_toml-5be7bea208b86e49.d: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/cargo_toml.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/afs.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/error.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/inheritable.rs
+
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/libcargo_toml-5be7bea208b86e49.rlib: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/cargo_toml.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/afs.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/error.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/inheritable.rs
+
+/Users/macbookpro/Desktop/emily_final/Agent_Emily/frontend/src-tauri/target/debug/deps/libcargo_toml-5be7bea208b86e49.rmeta: /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/cargo_toml.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/afs.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/error.rs /Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/inheritable.rs
+
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/cargo_toml.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/afs.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/error.rs:
+/Users/macbookpro/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cargo_toml-0.15.3/src/inheritable.rs:
