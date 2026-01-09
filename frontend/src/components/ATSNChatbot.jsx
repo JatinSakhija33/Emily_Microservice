@@ -18,6 +18,7 @@ import { leadsAPI } from '../services/leads'
 import { connectionsAPI } from '../services/connections'
 import { mediaAPI } from '../services/api'
 import { profileAPI } from '../services/profile'
+import hydrationManager from '../services/hydrationManager'
 
 // Get dark mode state from localStorage or default to dark mode
 const getDarkModePreference = () => {
@@ -505,34 +506,73 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     loadBusinessName()
   }, [user])
 
-  // Load today's conversations from daily cache
+  // Load today's conversations with cache-first hydration
   const loadTodayConversations = async () => {
     setIsHydrating(true)
     try {
-      console.log('🔄 loadTodayConversations called')
+      console.log('🔄 loadTodayConversations called (cache-first)')
       const token = await getAuthToken()
       if (!token) {
         console.log('❌ No auth token')
+        setIsHydrating(false)
         return
       }
 
-      console.log('📡 Fetching conversations from:', `${API_BASE_URL}/atsn/conversations`)
-      const response = await fetch(`${API_BASE_URL}/atsn/conversations`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+      // Use hydration manager for cache-first strategy
+      const result = await hydrationManager.hydrateConversations(async () => {
+        const response = await fetch(`${API_BASE_URL}/atsn/conversations`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
         }
-      })
 
-      console.log('📡 Response status:', response.status)
-      if (response.ok) {
-        const data = await response.json()
-        console.log('✅ Loaded today conversations:', data)
+        return await response.json()
+      }, user?.id)
 
-        if (data.conversations && data.conversations.length > 0) {
+      console.log(`✅ Loaded conversations from ${result.source}:`, result.data?.length || 0)
+
+      if (result.data && result.data.length > 0) {
+        const allMessages = []
+        result.data.forEach(conv => {
+          if (conv.messages && conv.messages.length > 0) {
+            conv.messages.forEach(msg => {
+              allMessages.push({
+                id: msg.id || `msg-${Date.now()}-${Math.random()}`,
+                sender: msg.sender || msg.message_type,
+                text: msg.text || msg.content,
+                timestamp: msg.timestamp || msg.created_at,
+                intent: msg.intent,
+                agent_name: msg.agent_name,
+                current_step: msg.current_step,
+                clarification_question: msg.clarification_question,
+                clarification_options: msg.clarification_options,
+                content_items: msg.content_items,
+                lead_items: msg.lead_items
+              })
+            })
+          }
+        })
+
+        allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+
+        if (allMessages.length > 0) {
+          setMessages(allMessages)
+          console.log(`✅ Displayed ${allMessages.length} messages (source: ${result.source})`)
+          setTimeout(() => scrollToBottom(), 100)
+        }
+      }
+
+      // Listen for background refresh updates
+      const handleRefresh = (event) => {
+        if (event.detail?.conversations) {
           const allMessages = []
-          data.conversations.forEach(conv => {
+          event.detail.conversations.forEach(conv => {
             if (conv.messages && conv.messages.length > 0) {
               conv.messages.forEach(msg => {
                 allMessages.push({
@@ -551,15 +591,17 @@ const ATSNChatbot = ({ externalConversations = null }) => {
               })
             }
           })
-
           allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-
-          if (allMessages.length > 0) {
-            setMessages(allMessages)
-            console.log(`Loaded ${allMessages.length} messages from today's conversations`)
-            setTimeout(() => scrollToBottom(), 100)
-          }
+          setMessages(allMessages)
+          console.log('🔄 Conversations refreshed in background')
         }
+      }
+
+      window.addEventListener('conversations-refreshed', handleRefresh)
+      
+      // Cleanup listener on unmount
+      return () => {
+        window.removeEventListener('conversations-refreshed', handleRefresh)
       }
     } catch (error) {
       console.error('Error loading today conversations:', error)

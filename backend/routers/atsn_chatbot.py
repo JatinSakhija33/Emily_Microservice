@@ -163,11 +163,11 @@ async def chat(
             logger.debug(f"Generated new session_id: {session_id} for user {user_id}")
 
         # Save user message to daily cache
-        user_message_data = {
-            "message_type": "user",
-            "content": chat_message.message,
-            "agent_name": "atsn"
-        }
+            user_message_data = {
+                "message_type": "user",
+                "content": chat_message.message,
+                "agent_name": "atsn"
+            }
         daily_cache.add_message_to_session(user_id, session_id, user_message_data)
         logger.info(f"Stored user message in cache for session {session_id}: {chat_message.message[:50]}...")
 
@@ -181,7 +181,7 @@ async def chat(
 
         # Get user's agent instance
         agent = get_user_agent(user_id)
-
+        
         # Process the query
         response = await agent.process_query(
             user_query=chat_message.message,
@@ -190,15 +190,15 @@ async def chat(
             media_file=chat_message.media_file,
             media_urls=chat_message.media_urls
         )
-
+        
         # Format response - ensure we always have a valid response string
         response_text = (
-            response.get('clarification_question') or
-            response.get('result') or
-            response.get('error') or
+            response.get('clarification_question') or 
+            response.get('result') or 
+            response.get('error') or 
             'I received your message. How can I help you?'
         )
-
+        
         # Determine agent name based on intent
         agent_name = 'emily'  # default
         intent = response.get('intent')
@@ -247,13 +247,13 @@ async def chat(
             "clarification_options": response.get('clarification_options'),
             "content_items": response.get('content_items'),
             "lead_items": response.get('lead_items')
-        }
+            }
         daily_cache.add_message_to_session(user_id, session_id, bot_message_data)
-
+        
         logger.info(f"ATSN response - Intent: {chat_response.intent}, Step: {chat_response.current_step}, Waiting: {chat_response.waiting_for_user}, Session: {session_id}")
-
+        
         return chat_response
-
+        
     except Exception as e:
         logger.error(f"Error in ATSN chat: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chat processing failed: {str(e)}")
@@ -308,21 +308,6 @@ async def get_status(current_user=Depends(get_current_user)):
     except Exception as e:
         logger.error(f"Error getting ATSN status: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Status check failed: {str(e)}")
-
-
-@router.get("/health")
-async def health_check():
-    """
-    Health check endpoint
-    """
-    from agents.atsn import supabase
-
-    return {
-        "status": "healthy",
-        "service": "atsn_chatbot",
-        "gemini_configured": bool(os.getenv("GEMINI_API_KEY")),
-        "supabase_configured": bool(supabase)
-    }
 
 
 @router.get("/cache-stats")

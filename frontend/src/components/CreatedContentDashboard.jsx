@@ -61,6 +61,7 @@ import {
 } from 'lucide-react'
 
 import { supabase } from '../lib/supabase'
+import hydrationManager from '../services/hydrationManager'
 
 // Platform icons with real logos
 const getPlatformIcon = (platformName) => {
@@ -180,22 +181,45 @@ function CreatedContentDashboard() {
         return
       }
 
-      const response = await fetch(`${API_BASE_URL}/content/created?limit=20&offset=0`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
+      // Use cache-first hydration strategy
+      const result = await hydrationManager.hydrateContent(async () => {
+        const response = await fetch(`${API_BASE_URL}/content/created?limit=20&offset=0`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch content: ${response.status}`)
         }
+
+        const data = await response.json()
+        return Array.isArray(data) ? data : []
       })
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch content: ${response.status}`)
+      console.log(`✅ Loaded ${result.data?.length || 0} posts from ${result.source}`)
+
+      if (result.data && Array.isArray(result.data)) {
+        setContent(result.data)
+        contentRef.current = result.data
       }
 
-      const data = await response.json()
-      const fetchedContent = Array.isArray(data) ? data : []
+      // Listen for background refresh updates
+      const handleRefresh = (event) => {
+        if (event.detail?.posts) {
+          setContent(event.detail.posts)
+          contentRef.current = event.detail.posts
+          console.log('🔄 Content refreshed in background')
+        }
+      }
 
-      setContent(fetchedContent)
-      contentRef.current = fetchedContent
+      window.addEventListener('content-refreshed', handleRefresh)
+      
+      // Cleanup listener on unmount
+      return () => {
+        window.removeEventListener('content-refreshed', handleRefresh)
+      }
 
     } catch (error) {
       console.error('Error fetching content:', error)

@@ -219,7 +219,7 @@ def get_progress(user_id: str) -> Dict[str, Any]:
 @app.on_event("startup")
 async def startup_event():
     """Start services on startup"""
-
+    
 
     # Start daily conversation cache cleanup scheduler
     try:
@@ -235,7 +235,7 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Failed to start daily cache cleanup scheduler: {e}")
         logger.info("Continuing without daily cache cleanup")
-
+    
     # Start analytics collection scheduler
     try:
         start_analytics_scheduler()
@@ -249,10 +249,10 @@ async def startup_event():
 async def shutdown_event():
     """Stop services on shutdown"""
     import asyncio
-
+    
     logger.info("Shutting down services...")
-
-
+    
+    
 
     # Stop daily cache cleanup scheduler
     try:
@@ -260,14 +260,14 @@ async def shutdown_event():
         logger.info("Daily cache cleanup scheduler stopped successfully")
     except Exception as e:
         logger.error(f"Error stopping daily cache cleanup scheduler: {e}")
-
+    
     # Stop analytics scheduler
     try:
         stop_analytics_scheduler()
         logger.info("Analytics scheduler stopped successfully")
     except Exception as e:
         logger.error(f"Error stopping analytics scheduler: {e}")
-
+    
     logger.info("Shutdown complete")
 
 # Pydantic models

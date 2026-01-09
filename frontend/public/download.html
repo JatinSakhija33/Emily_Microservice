@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download ATSN AI Desktop App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .download-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        .download-card:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+        .platform {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .platform-info {
+            flex: 1;
+        }
+        .platform-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+        .platform-desc {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .download-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: transform 0.2s ease;
+        }
+        .download-btn:hover {
+            transform: scale(1.05);
+        }
+        .version {
+            text-align: center;
+            color: #999;
+            margin-top: 30px;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Download ATSN AI</h1>
+        <p class="subtitle">Choose your platform to download the desktop app</p>
+        
+        <div class="download-card">
+            <div class="platform">
+                <div class="platform-info">
+                    <div class="platform-name">🍎 macOS</div>
+                    <div class="platform-desc">For Mac computers</div>
+                </div>
+                <a href="/downloads/atsn-ai_1.0.0_x64.dmg" class="download-btn" id="macos-download" download>Download</a>
+            </div>
+        </div>
+        
+        <div class="download-card">
+            <div class="platform">
+                <div class="platform-info">
+                    <div class="platform-name">🪟 Windows</div>
+                    <div class="platform-desc">For Windows 10/11</div>
+                </div>
+                <a href="/downloads/atsn-ai_1.0.0_x64-setup.exe" class="download-btn" id="windows-download" download>Download</a>
+            </div>
+        </div>
+        
+        <div class="download-card">
+            <div class="platform">
+                <div class="platform-info">
+                    <div class="platform-name">🐧 Linux</div>
+                    <div class="platform-desc">AppImage for Linux</div>
+                </div>
+                <a href="/downloads/atsn-ai_1.0.0_amd64.AppImage" class="download-btn" id="linux-download" download>Download</a>
+            </div>
+        </div>
+        
+        <div class="version">Version 1.0.0</div>
+    </div>
+    
+    <script src="/download-config.js"></script>
+    <script>
+        // Update download links from config
+        if (typeof DOWNLOAD_URLS !== 'undefined') {
+            const macosLink = document.getElementById('macos-download');
+            const windowsLink = document.getElementById('windows-download');
+            const linuxLink = document.getElementById('linux-download');
+            const versionEl = document.querySelector('.version');
+            
+            if (macosLink && DOWNLOAD_URLS.macos) macosLink.href = DOWNLOAD_URLS.macos;
+            if (windowsLink && DOWNLOAD_URLS.windows) windowsLink.href = DOWNLOAD_URLS.windows;
+            if (linuxLink && DOWNLOAD_URLS.linux) linuxLink.href = DOWNLOAD_URLS.linux;
+            if (versionEl && DOWNLOAD_URLS.version) versionEl.textContent = `Version ${DOWNLOAD_URLS.version}`;
+        }
+    </script>
+    </div>
+</body>
+</html>
+

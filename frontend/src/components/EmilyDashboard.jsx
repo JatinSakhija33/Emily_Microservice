@@ -735,46 +735,46 @@ function EmilyDashboard() {
                       : null
 
                     if (!lastMessage) return null
-
+                    
                     const isUser = lastMessage.sender === 'user'
                     const preview = lastMessage.text?.substring(0, 100) +
                       (lastMessage.text?.length > 100 ? '...' : '')
-
+                    
                     return (
                       <div key={conv.id} className={`p-3 rounded-lg border ${
                         isDarkMode
                           ? 'border-gray-700 bg-gray-800'
                           : 'border-gray-200 bg-white'
                       }`}>
-                        <div className="flex items-center gap-3">
-                          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm ${
+                          <div className="flex items-center gap-3">
+                            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm ${
                             isUser
                               ? 'bg-pink-400'
                               : 'bg-gradient-to-br from-pink-400 to-purple-500'
-                          }`}>
-                            {isUser ? (
-                              profile?.logo_url ? (
-                                <img src={profile.logo_url} alt="User" className="w-10 h-10 rounded-full object-cover" />
+                            }`}>
+                              {isUser ? (
+                                profile?.logo_url ? (
+                                  <img src={profile.logo_url} alt="User" className="w-10 h-10 rounded-full object-cover" />
+                                ) : (
+                                  <span className="text-white">U</span>
+                                )
                               ) : (
-                                <span className="text-white">U</span>
-                              )
-                            ) : (
-                              <span className="text-white font-bold">E</span>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-1">
+                                <span className="text-white font-bold">E</span>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
                               <span className={`text-sm font-medium ${
                                 isUser ? 'text-pink-700' : 'text-purple-700'
                               }`}>
                                 {isUser ? 'You' : conv.primary_agent_name || 'Emily'}
-                              </span>
+                                </span>
                               <span className={`text-xs ${
                                 isDarkMode ? 'text-gray-400' : 'text-gray-500'
                               }`}>
                                 {conv.total_messages} messages
                               </span>
-                            </div>
+                              </div>
                             <p className={`text-sm line-clamp-2 ${
                               isDarkMode ? 'text-gray-300' : 'text-gray-700'
                             }`}>
