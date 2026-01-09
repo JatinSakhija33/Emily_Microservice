@@ -158,7 +158,11 @@ function AppContent() {
     <Router>
       <Routes>
         {/*  Routes */}
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={
+          window.__TAURI_INTERNALS__ !== undefined ?
+            <Navigate to="/dashboard" replace /> :
+            <LandingPage />
+        } />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsAndConditions />} />
         <Route path="/cancellation-refunds" element={<CancellationAndRefunds />} />
