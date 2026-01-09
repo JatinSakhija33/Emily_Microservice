@@ -11,6 +11,7 @@ import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # Load environment variables before importing routers that depend on them
 load_dotenv()
@@ -44,6 +45,7 @@ from routers import document_parser
 from routers import smart_search
 from services.scheduler import start_analytics_scheduler, stop_analytics_scheduler, get_scheduler_status, trigger_analytics_collection_now
 from services.image_editor_service import image_editor_service
+from utils.daily_cache_manager import daily_cache
 
 # Load environment variables
 load_dotenv()
@@ -68,6 +70,9 @@ else:
     )
 
 logger = logging.getLogger(__name__)
+
+# Initialize scheduler for daily cache cleanup
+scheduler = AsyncIOScheduler()
 
 # Initialize FastAPI
 app = FastAPI(
@@ -214,8 +219,23 @@ def get_progress(user_id: str) -> Dict[str, Any]:
 @app.on_event("startup")
 async def startup_event():
     """Start services on startup"""
-    
-    
+
+
+    # Start daily conversation cache cleanup scheduler
+    try:
+        scheduler.add_job(
+            daily_cache.cleanup_old_caches,
+            'cron',
+            hour=0,
+            minute=1,  # 1 minute past midnight
+            id='daily_cache_cleanup'
+        )
+        scheduler.start()
+        logger.info("Daily conversation cache cleanup scheduler started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start daily cache cleanup scheduler: {e}")
+        logger.info("Continuing without daily cache cleanup")
+
     # Start analytics collection scheduler
     try:
         start_analytics_scheduler()
@@ -229,18 +249,25 @@ async def startup_event():
 async def shutdown_event():
     """Stop services on shutdown"""
     import asyncio
-    
+
     logger.info("Shutting down services...")
-    
-    
-    
+
+
+
+    # Stop daily cache cleanup scheduler
+    try:
+        scheduler.shutdown()
+        logger.info("Daily cache cleanup scheduler stopped successfully")
+    except Exception as e:
+        logger.error(f"Error stopping daily cache cleanup scheduler: {e}")
+
     # Stop analytics scheduler
     try:
         stop_analytics_scheduler()
         logger.info("Analytics scheduler stopped successfully")
     except Exception as e:
         logger.error(f"Error stopping analytics scheduler: {e}")
-    
+
     logger.info("Shutdown complete")
 
 # Pydantic models

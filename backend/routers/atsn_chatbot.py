@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from agents.atsn import ATSNAgent
 from supabase import create_client, Client
 from auth import get_current_user
+from utils.daily_cache_manager import daily_cache
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +36,7 @@ router = APIRouter(prefix="/atsn", tags=["atsn"])
 # Pydantic models for request/response
 class ChatMessage(BaseModel):
     message: str
+    session_id: Optional[str] = None
     conversation_history: Optional[List[str]] = None
     media_file: Optional[str] = None
     media_urls: Optional[List[str]] = None
@@ -148,46 +150,55 @@ async def chat(
     current_user=Depends(get_current_user)
 ):
     """
-    Handle chat messages with ATSN agent
+    Handle chat messages with ATSN agent using daily cache
     """
     try:
         user_id = current_user.id
         logger.info(f"ATSN chat request from user {user_id}: {chat_message.message}")
 
-        # Get or create conversation for this user
-        conversation = get_or_create_conversation(user_id)
+        # Generate session_id if not provided
+        session_id = chat_message.session_id
+        if not session_id:
+            session_id = f"session_{int(datetime.now(timezone.utc).timestamp())}"
+            logger.debug(f"Generated new session_id: {session_id} for user {user_id}")
 
-        # Save user message to conversation history
-        try:
-            user_message_data = {
-                "message_type": "user",
-                "content": chat_message.message,
-                "agent_name": "atsn"
-            }
-            save_message_to_conversation(conversation["id"], user_id, user_message_data)
-        except Exception as e:
-            logger.error(f"Error saving ATSN user message to conversation history: {e}")
+        # Save user message to daily cache
+        user_message_data = {
+            "message_type": "user",
+            "content": chat_message.message,
+            "agent_name": "atsn"
+        }
+        daily_cache.add_message_to_session(user_id, session_id, user_message_data)
+        logger.info(f"Stored user message in cache for session {session_id}: {chat_message.message[:50]}...")
+
+        # Get conversation history from cache for context (last 10 messages)
+        session_data = daily_cache.get_session_messages(user_id, session_id)
+        conversation_history = []
+        if session_data and session_data["messages"]:
+            # Get last 10 messages for context, excluding the current user message
+            recent_messages = session_data["messages"][-11:-1]  # Last 10 before current
+            conversation_history = [msg["content"] for msg in recent_messages if msg["message_type"] == "user"]
 
         # Get user's agent instance
         agent = get_user_agent(user_id)
-        
+
         # Process the query
         response = await agent.process_query(
             user_query=chat_message.message,
-            conversation_history=chat_message.conversation_history,
+            conversation_history=conversation_history,
             user_id=user_id,
             media_file=chat_message.media_file,
             media_urls=chat_message.media_urls
         )
-        
+
         # Format response - ensure we always have a valid response string
         response_text = (
-            response.get('clarification_question') or 
-            response.get('result') or 
-            response.get('error') or 
+            response.get('clarification_question') or
+            response.get('result') or
+            response.get('error') or
             'I received your message. How can I help you?'
         )
-        
+
         # Determine agent name based on intent
         agent_name = 'emily'  # default
         intent = response.get('intent')
@@ -225,31 +236,24 @@ async def chat(
             agent_name=agent_name
         )
 
-        # Save bot response to conversation history
-        try:
-            bot_message_data = {
-                "message_type": "bot",
-                "content": response_text,
-                "agent_name": agent_name,
-                "intent": response.get('intent'),
-                "current_step": response.get('current_step', 'unknown'),
-                "clarification_question": response.get('clarification_question'),
-                "clarification_options": response.get('clarification_options'),
-                "content_items": response.get('content_items'),
-                "lead_items": response.get('lead_items')
-            }
-            save_message_to_conversation(conversation["id"], user_id, bot_message_data)
+        # Save bot response to daily cache
+        bot_message_data = {
+            "message_type": "bot",
+            "content": response_text,
+            "agent_name": agent_name,
+            "intent": response.get('intent'),
+            "current_step": response.get('current_step', 'unknown'),
+            "clarification_question": response.get('clarification_question'),
+            "clarification_options": response.get('clarification_options'),
+            "content_items": response.get('content_items'),
+            "lead_items": response.get('lead_items')
+        }
+        daily_cache.add_message_to_session(user_id, session_id, bot_message_data)
 
-            # Note: Task count increment moved to frontend after task completion display
-            # Note: Image count increment moved to after successful image generation in atsn.py
+        logger.info(f"ATSN response - Intent: {chat_response.intent}, Step: {chat_response.current_step}, Waiting: {chat_response.waiting_for_user}, Session: {session_id}")
 
-        except Exception as e:
-            logger.error(f"Error saving ATSN bot response to conversation history: {e}")
-        
-        logger.info(f"ATSN response - Intent: {chat_response.intent}, Step: {chat_response.current_step}, Waiting: {chat_response.waiting_for_user}")
-        
         return chat_response
-        
+
     except Exception as e:
         logger.error(f"Error in ATSN chat: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chat processing failed: {str(e)}")
@@ -321,52 +325,79 @@ async def health_check():
     }
 
 
+@router.get("/cache-stats")
+async def get_cache_stats(current_user=Depends(get_current_user)):
+    """
+    Get daily cache statistics (admin/debug endpoint)
+    """
+    try:
+        # Check if user is admin (you might want to add proper admin check)
+        stats = daily_cache.get_cache_stats()
+        return {
+            "cache_stats": stats,
+            "user_count": len(daily_cache.cache),
+            "current_time": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting cache stats: {str(e)}")
+        return {"error": "Failed to get cache stats"}
+
+
+@router.post("/clear-cache")
+async def clear_user_cache(current_user=Depends(get_current_user), all: bool = False):
+    """
+    Clear user's daily cache (for debugging)
+    """
+    try:
+        if all:
+            # Admin function to clear all cache
+            daily_cache.clear_all_cache()
+            logger.info("Cleared all cache data")
+            return {"message": "All cache cleared"}
+        else:
+            user_id = current_user.id
+            daily_cache.clear_user_cache(user_id)
+            logger.info(f"Manually cleared cache for user {user_id}")
+            return {"message": f"Cache cleared for user {user_id}"}
+    except Exception as e:
+        logger.error(f"Error clearing cache: {str(e)}")
+        return {"error": "Failed to clear cache"}
+
+
 @router.get("/conversations")
 async def get_atsn_conversations(
     current_user=Depends(get_current_user),
     limit: int = Query(20, description="Number of conversations to return", le=50),
-    date: str = Query(None, description="Date to filter conversations (YYYY-MM-DD format). If not provided, uses today's date"),
-    all: bool = Query(False, description="Get all conversations instead of just today's")
+    all: bool = Query(False, description="Get all conversations instead of just today's (not applicable with daily cache)")
 ):
-    """Get ATSN conversations for current user - today's by default, or all if all=true"""
+    """Get ATSN conversations for current user from daily cache - only today's conversations"""
     try:
         user_id = current_user.id
 
-        logger.info(f"Fetching ATSN conversations for user {user_id}, all={all}, limit={limit}")
+        logger.info(f"Fetching today's ATSN conversations for user {user_id} from daily cache")
 
-        if all:
-            # Get all conversations
-            conversations_result = supabase_client.table("atsn_conversations").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit).execute()
-        else:
-            # Use provided date or default to today
-            if date:
-                filter_date = date
-            else:
-                filter_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        # Get conversations from daily cache
+        cache_data = daily_cache.get_user_conversations(user_id)
+        conversations = cache_data["conversations"]
 
-            logger.info(f"Fetching ATSN conversations for user {user_id}, date={filter_date}, limit={limit}")
-            # Get conversations filtered by date
-            conversations_result = supabase_client.table("atsn_conversations").select("*").eq("user_id", user_id).eq("conversation_date", filter_date).order("created_at", desc=True).limit(limit).execute()
+        logger.info(f"Found {len(conversations)} conversations with {cache_data['day_stats']['total_messages']} total messages")
 
-        conversations = conversations_result.data if conversations_result.data else []
+        # Apply limit if specified
+        if limit and len(conversations) > limit:
+            conversations = conversations[-limit:]  # Get most recent
 
-        # For each conversation, get the messages
-        conversations_with_messages = []
+        # Convert messages to frontend format
+        conversations_with_formatted_messages = []
         for conv in conversations:
-            # Get messages for this conversation
-            messages_result = supabase_client.table("atsn_conversation_messages").select("*").eq("conversation_id", conv["id"]).order("message_sequence", desc=False).execute()
-            messages = messages_result.data if messages_result.data else []
-
-            # Convert messages to frontend format
             formatted_messages = []
-            for msg in messages:
+            for msg in conv["messages"]:
                 formatted_msg = {
-                    "id": f"msg-{msg['id']}",
+                    "id": f"msg-{msg['created_at']}",  # Use timestamp as ID since we don't have DB IDs
                     "sender": msg["message_type"],
                     "text": msg["content"],
                     "timestamp": msg["created_at"],
                     "intent": msg.get("intent"),
-                    "agent_name": msg.get("agent_name"),
+                    "agent_name": msg.get("agent_name", "atsn"),
                     "current_step": msg.get("current_step"),
                     "clarification_question": msg.get("clarification_question"),
                     "clarification_options": msg.get("clarification_options"),
@@ -375,28 +406,32 @@ async def get_atsn_conversations(
                 }
                 formatted_messages.append(formatted_msg)
 
-            conversations_with_messages.append({
-                "id": conv["id"],
+            conversations_with_formatted_messages.append({
+                "id": conv["session_id"],
                 "session_id": conv["session_id"],
-                "conversation_date": conv["conversation_date"],
-                "primary_agent_name": conv["primary_agent_name"],
+                "conversation_date": cache_data["current_day"],
+                "primary_agent_name": conv.get("agent_name", "atsn"),  # Use get() with default
                 "total_messages": len(formatted_messages),
                 "messages": formatted_messages,
-                "created_at": conv["created_at"],
-                "updated_at": conv["updated_at"]
+                "created_at": conv.get("started_at", datetime.now(timezone.utc).isoformat()),
+                "updated_at": conv.get("last_activity", datetime.now(timezone.utc).isoformat())
             })
 
-        logger.info(f"Returning {len(conversations_with_messages)} ATSN conversations for user {user_id}")
+        logger.info(f"Returning {len(conversations_with_formatted_messages)} today's conversations for user {user_id}")
         return {
-            "conversations": conversations_with_messages,
-            "count": len(conversations_with_messages)
+            "conversations": conversations_with_formatted_messages,
+            "count": len(conversations_with_formatted_messages),
+            "current_day": cache_data["current_day"],
+            "day_stats": cache_data["day_stats"]
         }
 
     except Exception as e:
-        logger.error(f"Error fetching ATSN conversations: {str(e)}", exc_info=True)
+        logger.error(f"Error fetching ATSN conversations from cache: {str(e)}", exc_info=True)
         return {
             "conversations": [],
-            "count": 0
+            "count": 0,
+            "current_day": datetime.now(timezone.utc).date().isoformat(),
+            "day_stats": {"total_conversations": 0, "total_messages": 0}
         }
 
 

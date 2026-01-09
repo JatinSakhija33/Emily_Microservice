@@ -46,7 +46,7 @@ import MainContentLoader from './MainContentLoader'
 import ATSNChatbot from './ATSNChatbot'
 import RecentTasks from './RecentTasks'
 import ContentCard from './ContentCard'
-import { Sparkles, TrendingUp, Target, BarChart3, FileText, PanelRight, PanelLeft, X, ChevronRight, RefreshCw, ChevronDown, History } from 'lucide-react'
+import { Sparkles, TrendingUp, Target, BarChart3, FileText, PanelRight, PanelLeft, X, ChevronRight, RefreshCw } from 'lucide-react'
 
 // Voice Orb Component with animated border (spring-like animation)
 const VoiceOrb = ({ isSpeaking }) => {
@@ -186,11 +186,7 @@ function EmilyDashboard() {
   const [overdueLeadsCount, setOverdueLeadsCount] = useState(0)
   const [overdueLeadsLoading, setOverdueLeadsLoading] = useState(true)
 
-  // Conversation history and search
-  const [showHistoryDropdown, setShowHistoryDropdown] = useState(false)
-  const [conversationHistory, setConversationHistory] = useState([])
-  const [selectedConversation, setSelectedConversation] = useState(null)
-  const [historySearch, setHistorySearch] = useState('')
+  // Today's conversations only (no historical data)
 
   // Listen for dark mode changes from other components (like SideNavbar)
   useStorageListener('darkMode', setIsDarkMode)
@@ -312,10 +308,10 @@ function EmilyDashboard() {
     }
   }, [user])
 
-  // Fetch all conversations when panel opens
+  // Fetch today's conversations when panel opens
   useEffect(() => {
     if (isPanelOpen && user) {
-      fetchAllConversations()
+      fetchTodayConversations()
     }
   }, [isPanelOpen, user])
 
@@ -329,49 +325,7 @@ function EmilyDashboard() {
     }
   }, [user])
 
-  // Load conversation history
-  const loadConversationHistory = async () => {
-    try {
-      const token = await getAuthToken()
-      if (!token) return
-
-      const response = await fetch(`${API_BASE_URL}/atsn/conversations?all=true&limit=50`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setConversationHistory(data.conversations || [])
-      }
-    } catch (error) {
-      console.error('Error loading conversation history:', error)
-    }
-  }
-
-  // Load a specific conversation
-  const loadConversation = (conversation) => {
-    if (conversation && conversation.messages) {
-      setSelectedConversation(conversation)
-      setShowHistoryDropdown(false)
-      setHistorySearch('')
-    }
-  }
-
-  // Load history on component mount
-  useEffect(() => {
-    loadConversationHistory()
-  }, [])
-
-  // Set selectedDate to today by default, don't override with most recent conversation date
-  useEffect(() => {
-    if (conversations.length > 0 && !hasSetInitialDate.current) {
-      // Keep today's date as default, don't change to most recent conversation date
-      hasSetInitialDate.current = true
-    }
-  }, [conversations])
+  // No conversation history loading - only today's conversations
 
 // Date filtering removed - chatbot starts fresh
 
@@ -393,7 +347,7 @@ function EmilyDashboard() {
     return session?.access_token
   }
 
-  const fetchAllConversations = async () => {
+  const fetchTodayConversations = async () => {
     setLoadingConversations(true)
     try {
       const authToken = await getAuthToken()
@@ -403,7 +357,8 @@ function EmilyDashboard() {
         return
       }
 
-      const response = await fetch(`${API_BASE_URL}/atsn-chatbot/conversations?all=true`, {
+      // Fetch only today's conversations from daily cache
+      const response = await fetch(`${API_BASE_URL}/atsn/conversations`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -413,12 +368,11 @@ function EmilyDashboard() {
 
       if (response.ok) {
         const data = await response.json()
-        if (data.success && data.conversations) {
-          setConversations(data.conversations)
-        }
+        setConversations(data.conversations || [])
       }
     } catch (error) {
-      console.error('Error fetching conversations:', error)
+      console.error('Error fetching today conversations:', error)
+      setConversations([])
     } finally {
       setLoadingConversations(false)
     }
@@ -503,7 +457,7 @@ function EmilyDashboard() {
         onOpenChatHistory={() => {
           setShowMobileChatHistory(true)
           if (!conversations.length && user) {
-            fetchAllConversations()
+            fetchTodayConversations()
           }
         }}
         showChatHistory={showMobileChatHistory}
@@ -591,95 +545,6 @@ function EmilyDashboard() {
               </div>
               
               <div className="flex items-center gap-2">
-                {/* History Dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowHistoryDropdown(!showHistoryDropdown)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors border ${
-                      isDarkMode
-                        ? 'hover:bg-gray-700 border-gray-600 text-gray-300'
-                        : 'hover:bg-gray-100 border-gray-200 text-gray-700'
-                    }`}
-                    title="Conversation History"
-                  >
-                    <History className="w-4 h-4" />
-                    <span className="text-sm font-medium hidden sm:inline">History</span>
-                    <ChevronDown className={`w-4 h-4 transition-transform ${showHistoryDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {showHistoryDropdown && (
-                    <div className={`absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto rounded-md shadow-lg border z-50 ${
-                      isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-                    }`}>
-                      <div className={`px-4 py-2 border-b ${
-                        isDarkMode ? 'border-gray-700 text-gray-200' : 'border-gray-200 text-gray-800'
-                      }`}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <History className="w-4 h-4" />
-                          <h3 className="text-sm font-medium">Conversation History</h3>
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Search conversations..."
-                          value={historySearch}
-                          onChange={(e) => setHistorySearch(e.target.value)}
-                          className={`w-full px-3 py-1 text-sm rounded border ${
-                            isDarkMode
-                              ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400'
-                              : 'bg-white border-gray-300 text-gray-800 placeholder-gray-500'
-                          }`}
-                        />
-                      </div>
-
-                      {conversationHistory.length === 0 ? (
-                        <div className={`px-4 py-8 text-center ${
-                          isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                        }`}>
-                          <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">No conversations yet</p>
-                        </div>
-                      ) : (
-                        <div className="py-1">
-                          {conversationHistory
-                            .filter(conv =>
-                              conv.primary_agent_name?.toLowerCase().includes(historySearch.toLowerCase()) ||
-                              conv.messages?.some(msg => msg.text?.toLowerCase().includes(historySearch.toLowerCase()))
-                            )
-                            .map((conv) => (
-                            <button
-                              key={conv.id}
-                              onClick={() => loadConversation(conv)}
-                              className={`w-full px-4 py-3 text-left hover:${
-                                isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
-                              } transition-colors border-b ${
-                                isDarkMode ? 'border-gray-700' : 'border-gray-100'
-                              } last:border-b-0`}
-                            >
-                              <div className={`text-sm font-medium ${
-                                isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                              }`}>
-                                {conv.primary_agent_name || 'ATSN'} Session
-                              </div>
-                              <div className={`text-xs mt-1 ${
-                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                              }`}>
-                                {conv.total_messages} messages • {new Date(conv.created_at).toLocaleDateString()}
-                              </div>
-                              {conv.messages && conv.messages.length > 0 && (
-                                <div className={`text-xs mt-2 line-clamp-2 ${
-                                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                                }`}>
-                                  {conv.messages[conv.messages.length - 1]?.text || 'No preview available'}
-                                </div>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
                 {/* Panel Toggle Button */}
                 <button
                   onClick={() => setIsPanelOpen(!isPanelOpen)}
@@ -717,7 +582,6 @@ function EmilyDashboard() {
                 }`}>
                   <ATSNChatbot
                     key="atsn-chatbot-fresh"
-                    externalConversations={selectedConversation?.messages}
                   />
                 </div>
               </div>
@@ -793,21 +657,31 @@ function EmilyDashboard() {
 
       
 
-      {/* Mobile Chat History Panel - Full Screen */}
+      {/* Mobile Today's Conversations Panel - Full Screen */}
       {showMobileChatHistory && (
         <div className={`md:hidden fixed inset-0 z-50 ${
           isDarkMode ? 'bg-gray-900' : 'bg-white'
         }`}>
           <div className="flex flex-col h-full">
             {/* Header */}
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 flex-shrink-0">
-              <h2 className="text-lg font-semibold text-gray-900">Chat History</h2>
+            <div className={`p-4 border-b flex items-center justify-between flex-shrink-0 ${
+              isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'
+            }`}>
+              <h2 className={`text-lg font-semibold ${
+                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+              }`}>
+                Today's Conversations
+              </h2>
               <button
                 onClick={() => setShowMobileChatHistory(false)}
-                className="p-2 rounded-md hover:bg-gray-200 transition-colors"
+                className={`p-2 rounded-md transition-colors ${
+                  isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
+                }`}
                 title="Close"
               >
-                <X className="w-5 h-5 text-gray-600" />
+                <X className={`w-5 h-5 ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                }`} />
               </button>
             </div>
 
@@ -815,68 +689,78 @@ function EmilyDashboard() {
             <div className="flex-1 overflow-y-auto p-4">
               {loadingConversations ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className="text-sm text-gray-500">Loading conversations...</div>
+                  <div className={`text-sm ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    Loading today's conversations...
+                  </div>
                 </div>
               ) : conversations.length === 0 ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className="text-sm text-gray-500">No conversations yet</div>
+                  <div className={`text-sm ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    No conversations today
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {groupConversationsByDate(conversations).map(({ date, dateObj, lastConversation }) => {
-                    if (!lastConversation) return null
-                    
-                    const isUser = lastConversation.message_type === 'user'
-                    const preview = lastConversation.content?.substring(0, 50) + (lastConversation.content?.length > 50 ? '...' : '')
-                    const messageDate = new Date(lastConversation.created_at)
-                    const formattedDate = messageDate.toLocaleDateString('en-US', { 
-                      month: 'short', 
-                      day: 'numeric',
-                      year: messageDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-                    })
-                    
-                    // Check if this date is selected
-                    const isSelected = selectedDate && 
-                      selectedDate.toDateString() === new Date(dateObj).toDateString()
-                    
+                  {conversations.map((conv) => {
+                    const lastMessage = conv.messages && conv.messages.length > 0
+                      ? conv.messages[conv.messages.length - 1]
+                      : null
+
+                    if (!lastMessage) return null
+
+                    const isUser = lastMessage.sender === 'user'
+                    const preview = lastMessage.text?.substring(0, 100) +
+                      (lastMessage.text?.length > 100 ? '...' : '')
+
                     return (
-                      <div key={date}>
-                        <div
-                          onClick={() => {
-                            setSelectedDate(new Date(dateObj))
-                            // Date selection only - no conversation loading
-                            setShowMobileChatHistory(false)
-                          }}
-                          className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                            isSelected 
-                              ? 'bg-gray-100'
-                              : 'hover:bg-gray-50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm ${
-                              isUser ? 'bg-pink-400' : 'bg-gradient-to-br from-pink-400 to-purple-500'
-                            }`}>
-                              {isUser ? (
-                                profile?.logo_url ? (
-                                  <img src={profile.logo_url} alt="User" className="w-10 h-10 rounded-full object-cover" />
-                                ) : (
-                                  <span className="text-white">U</span>
-                                )
+                      <div key={conv.id} className={`p-3 rounded-lg border ${
+                        isDarkMode
+                          ? 'border-gray-700 bg-gray-800'
+                          : 'border-gray-200 bg-white'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm ${
+                            isUser
+                              ? 'bg-pink-400'
+                              : 'bg-gradient-to-br from-pink-400 to-purple-500'
+                          }`}>
+                            {isUser ? (
+                              profile?.logo_url ? (
+                                <img src={profile.logo_url} alt="User" className="w-10 h-10 rounded-full object-cover" />
                               ) : (
-                                <span className="text-white font-bold">E</span>
-                              )}
+                                <span className="text-white">U</span>
+                              )
+                            ) : (
+                              <span className="text-white font-bold">E</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`text-sm font-medium ${
+                                isUser ? 'text-pink-700' : 'text-purple-700'
+                              }`}>
+                                {isUser ? 'You' : conv.primary_agent_name || 'Emily'}
+                              </span>
+                              <span className={`text-xs ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                              }`}>
+                                {conv.total_messages} messages
+                              </span>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className={`text-sm font-medium ${isUser ? 'text-pink-700' : 'text-purple-700'}`}>
-                                  {isUser ? 'You' : 'Emily'}
-                                </span>
-                                <span className="text-xs text-gray-400">{formattedDate}</span>
-                              </div>
-                              <p className="text-sm text-gray-700 line-clamp-2">{preview}</p>
-                              <p className="text-xs text-gray-500 mt-1">{date}</p>
-                            </div>
+                            <p className={`text-sm line-clamp-2 ${
+                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
+                              {preview || 'No preview available'}
+                            </p>
+                            <p className={`text-xs mt-1 ${
+                              isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                            }`}>
+                              {new Date(conv.created_at).toLocaleTimeString()}
+                            </p>
                           </div>
                         </div>
                       </div>

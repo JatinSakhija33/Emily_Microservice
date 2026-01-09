@@ -145,6 +145,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const [tooltipAgent, setTooltipAgent] = useState(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
   const [agentProfiles, setAgentProfiles] = useState({}) // Cache for agent profiles
+  const [isHydrating, setIsHydrating] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference)
   const [likedMessages, setLikedMessages] = useState(new Set())
   const messagesEndRef = useRef(null)
@@ -460,9 +461,18 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
   // Initialize session tracking and handle external conversations
   useEffect(() => {
-    // Track session start time for caching
+    // Get or create persistent session ID
     if (user && !sessionStartTime) {
-      setSessionStartTime(new Date().toISOString())
+      const today = new Date().toISOString().split('T')[0]
+      const sessionKey = `atsn_session_${user.id}_${today}`
+      let persistentSessionId = localStorage.getItem(sessionKey)
+
+      if (!persistentSessionId) {
+        persistentSessionId = `session_${user.id}_${Date.now()}`
+        localStorage.setItem(sessionKey, persistentSessionId)
+      }
+
+      setSessionStartTime(persistentSessionId)
     }
 
     // Load business name from profile
@@ -495,6 +505,68 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     loadBusinessName()
   }, [user])
 
+  // Load today's conversations from daily cache
+  const loadTodayConversations = async () => {
+    setIsHydrating(true)
+    try {
+      console.log('🔄 loadTodayConversations called')
+      const token = await getAuthToken()
+      if (!token) {
+        console.log('❌ No auth token')
+        return
+      }
+
+      console.log('📡 Fetching conversations from:', `${API_BASE_URL}/atsn/conversations`)
+      const response = await fetch(`${API_BASE_URL}/atsn/conversations`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      console.log('📡 Response status:', response.status)
+      if (response.ok) {
+        const data = await response.json()
+        console.log('✅ Loaded today conversations:', data)
+
+        if (data.conversations && data.conversations.length > 0) {
+          const allMessages = []
+          data.conversations.forEach(conv => {
+            if (conv.messages && conv.messages.length > 0) {
+              conv.messages.forEach(msg => {
+                allMessages.push({
+                  id: msg.id || `msg-${Date.now()}-${Math.random()}`,
+                  sender: msg.sender || msg.message_type,
+                  text: msg.text || msg.content,
+                  timestamp: msg.timestamp || msg.created_at,
+                  intent: msg.intent,
+                  agent_name: msg.agent_name,
+                  current_step: msg.current_step,
+                  clarification_question: msg.clarification_question,
+                  clarification_options: msg.clarification_options,
+                  content_items: msg.content_items,
+                  lead_items: msg.lead_items
+                })
+              })
+            }
+          })
+
+          allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+
+          if (allMessages.length > 0) {
+            setMessages(allMessages)
+            console.log(`Loaded ${allMessages.length} messages from today's conversations`)
+            setTimeout(() => scrollToBottom(), 100)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading today conversations:', error)
+    } finally {
+      setIsHydrating(false)
+    }
+  }
 
   // Initialize session tracking and handle external conversations
   useEffect(() => {
@@ -518,8 +590,16 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       setMessageCache([]) // Clear cache since we're loading from history
       setHasUnsavedChanges(false)
       setTimeout(() => scrollToBottom(), 100)
+      return
     }
-    // Note: Automatic conversation loading is disabled for better performance
+
+    // Load today's conversations from daily cache if no messages are loaded
+    if (user && !externalConversations && messages.length === 0) {
+      console.log('🚀 Triggering loadTodayConversations - user:', !!user, 'externalConversations:', !!externalConversations, 'messages:', messages.length)
+      loadTodayConversations()
+    } else {
+      console.log('⏭️ Skipping loadTodayConversations - user:', !!user, 'externalConversations:', !!externalConversations, 'messages:', messages.length)
+    }
   }, [user, externalConversations, chatReset, resetTimestamp, sessionStartTime])
 
   // Reset scroll flag when chat is reset
@@ -541,70 +621,6 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   }, [messages.length])
 
 
-  // Load today's conversations (similar to Chatbot.jsx)
-  const loadTodayConversations = async () => {
-    try {
-      const token = await getAuthToken()
-      if (!token) {
-        console.error('No auth token available')
-        return
-      }
-
-      const response = await fetch(`${API_BASE_URL}/atsn/conversations`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      if (!response.ok) {
-        console.error('Failed to fetch today\'s conversations:', response.status)
-        return
-      }
-
-      const data = await response.json()
-      console.log('Today\'s conversations response:', data)
-
-      if (data.conversations && data.conversations.length > 0) {
-        // Handle new conversation structure with embedded messages
-        console.log(`Found ${data.conversations.length} ATSN conversations for today`)
-
-        // Flatten all messages from all conversations
-        const allMessages = []
-        data.conversations.forEach(conv => {
-          if (conv.messages && conv.messages.length > 0) {
-            conv.messages.forEach(msg => {
-              allMessages.push({
-                id: msg.id,
-                conversationId: conv.id,
-                sender: msg.sender,
-                text: msg.text,
-                timestamp: msg.timestamp,
-                intent: msg.intent,
-                agent_name: msg.agent_name,
-                current_step: msg.current_step,
-                clarification_question: msg.clarification_question,
-                clarification_options: msg.clarification_options,
-                content_items: msg.content_items,
-                lead_items: msg.lead_items,
-                isNew: false
-              })
-            })
-          }
-        })
-
-        if (allMessages.length > 0) {
-          // Sort messages by timestamp
-          allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-          setMessages(allMessages)
-          console.log(`Loaded ${allMessages.length} today's ATSN messages from ${data.conversations.length} conversations`)
-        }
-      }
-    } catch (error) {
-      console.error('Error loading today\'s conversations:', error)
-    }
-  }
 
   // Real-time conversation updates
   useEffect(() => {
@@ -910,7 +926,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         body: JSON.stringify({
           message: userMessage,
           conversation_history: updatedHistory,
-          session_id: `session-${user.id}-${sessionStartTime}`,
+          session_id: sessionStartTime, // Use persistent session ID
           agent_status: agentStatus,
           thinking_phase: thinkingPhase,
           is_first_message: isFirstMessage
@@ -2992,110 +3008,26 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         </div>
       )}
 
-      {/* Messages or Welcome Screen */}
+      {/* Messages Area - Always show conversation interface */}
       <div
         className="flex-1 overflow-y-auto scrollbar-hide p-6"
         onClick={handleChatAreaClick}
       >
-        {messages.length === 0 ? (
-          /* Welcome Screen */
-          <div className="flex flex-col items-center justify-center h-full space-y-8">
-            {/* Title */}
-              <div className={`text-3xl md:text-4xl font-normal ${
-                isDarkMode ? 'text-gray-100' : 'text-gray-900'
-              }`}>
-                {businessName ? `${businessName}'s workplace` : "atsn ai's workplace"}
-              </div>
-
-            {/* Input Box in Center */}
-            <div className="w-full max-w-lg mx-auto">
-              <div className="relative">
-                <textarea
-                  ref={inputRef}
-                  rows={1}
-                  value={inputMessage}
-                  onChange={(e) => {
-                    setInputMessage(e.target.value)
-                    adjustInputHeight(e.target, WELCOME_MAX_INPUT_HEIGHT)
-                  }}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Ask me to manage your content or leads..."
-                  className={`w-full px-6 pr-14 py-4 text-base rounded-[20px] backdrop-blur-sm focus:outline-none shadow-lg resize-none transition-[height] overflow-hidden ${
-                    isDarkMode
-                      ? 'bg-gray-700/80 border-0 focus:ring-0 text-gray-100 placeholder-gray-400'
-                      : 'bg-white/80 border border-white/20 focus:ring-2 focus:ring-white/30 focus:border-white/50 text-gray-900 placeholder-gray-500'
-                  }`}
-                  disabled={isLoading}
-                  style={{ maxHeight: `${WELCOME_MAX_INPUT_HEIGHT}px`, overflowY: 'auto' }}
-                />
-                <button
-                  onClick={handleSendMessage}
-                  disabled={isLoading || !inputMessage.trim()}
-                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-7 h-7 transition-all flex items-center justify-center ${
-                    isDarkMode
-                      ? 'text-green-400 hover:text-green-300 disabled:text-gray-500'
-                      : 'text-blue-600 hover:text-blue-700 disabled:text-gray-400'
-                  } disabled:cursor-not-allowed`}
-                >
-                  <Send className="w-5 h-5 transform rotate-45" />
-                </button>
-              </div>
-
-              {/* Instructions */}
-              <div className={`mt-6 text-center space-y-4 ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              }`}>
-                <div className="text-sm font-medium">
-                  What would you like to do? Our agents are ready to work
-                </div>
-
-                {/* Agent Logos */}
-                <div className="flex justify-center items-center gap-6 mt-4">
-                  <div className="flex flex-col items-center space-y-2">
-                    <div 
-                      className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 transition-transform duration-200"
-                      onMouseEnter={(e) => handleAgentHover('Emily', e)}
-                      onMouseLeave={handleAgentLeave}
-                    >
-                      <img src="/emily_icon.png" alt="Emily" className="w-10 h-10 rounded-full object-cover" />
-                    </div>
-                    <span className="text-xs font-medium">Emily</span>
-                  </div>
-
-                  <div className="flex flex-col items-center space-y-2">
-                    <div 
-                      className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 transition-transform duration-200"
-                      onMouseEnter={(e) => handleAgentHover('Leo', e)}
-                      onMouseLeave={handleAgentLeave}
-                    >
-                      <img src="/leo_logo.png" alt="Leo" className="w-10 h-10 rounded-full object-cover" />
-                    </div>
-                    <span className="text-xs font-medium">Leo</span>
-                  </div>
-
-                  <div className="flex flex-col items-center space-y-2">
-                    <div 
-                      className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 transition-transform duration-200"
-                      onMouseEnter={(e) => handleAgentHover('Chase', e)}
-                      onMouseLeave={handleAgentLeave}
-                    >
-                      <img src="/chase_logo.png" alt="Chase" className="w-10 h-10 rounded-full object-cover" />
-                    </div>
-                    <span className="text-xs font-medium">Chase</span>
-                  </div>
-                </div>
-              </div>
-
-            </div>
+        {/* Messages */}
+        {isHydrating && messages.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-4xl text-white/70">
+            <span className="animate-pulse">.</span>
+            <span className="animate-pulse delay-150">.</span>
+            <span className="animate-pulse delay-300">.</span>
           </div>
         ) : (
-          /* Messages */
-          <div className="space-y-6">
-        {messages.map((message, index) => (
-          <div
-            key={message.id}
-            className={`group flex gap-3 ${message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
-          >
+          <>
+            <div className="space-y-6">
+            {messages.map((message, index) => (
+            <div
+              key={message.id}
+              className={`group flex gap-3 ${message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+            >
             {/* Avatar */}
             <div
               className={`${
@@ -4243,39 +4175,37 @@ const ATSNChatbot = ({ externalConversations = null }) => {
             </div>
           </div>
         ))}
-        
-        {/* Thinking message as plain text on the left */}
-        {isLoading && messages.length > 0 && messages[messages.length - 1].sender === 'user' && (
-          <div className="flex gap-3 flex-row items-center">
-            {/* Lottie animation */}
-            {generatingAnimationData && (
-              <div className="w-72 h-72 flex-shrink-0">
-                <Lottie 
-                  animationData={generatingAnimationData}
-                  loop={true}
-                  autoplay={true}
-                  style={{ width: '100%', height: '100%' }}
-                />
-              </div>
-            )}
-            <div className="flex-1 max-w-[60%] text-left">
-              {/* Thinking message with pulse animation */}
-              <div className={`text-sm italic animate-pulse ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-600'
-              }`}>
-                {getThinkingMessage()}
+          </div>
+          {isLoading && messages.length > 0 && messages[messages.length - 1].sender === 'user' && (
+            <div className="flex gap-3 flex-row items-center">
+              {/* Lottie animation */}
+              {generatingAnimationData && (
+                <div className="w-72 h-72 flex-shrink-0">
+                  <Lottie 
+                    animationData={generatingAnimationData}
+                    loop={true}
+                    autoplay={true}
+                    style={{ width: '100%', height: '100%' }}
+                  />
+                </div>
+              )}
+              <div className="flex-1 max-w-[60%] text-left">
+                {/* Thinking message with pulse animation */}
+                <div className={`text-sm italic animate-pulse ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                }`}>
+                  {getThinkingMessage()}
+                </div>
               </div>
             </div>
-          </div>
-        )}
-        
-        <div ref={messagesEndRef} />
-          </div>
+          )}
+          
+          <div ref={messagesEndRef} />
+        </>
         )}
       </div>
 
-      {/* Input - Only show when there are messages */}
-        {messages.length > 0 && (
+      {/* Input - Always show conversation interface */}
       <div className={`p-4 border-t ${
         isDarkMode ? 'border-gray-700' : 'border-gray-200'
       }`}>
@@ -4338,7 +4268,6 @@ const ATSNChatbot = ({ externalConversations = null }) => {
           Try: "Show scheduled posts" • "Create lead" • "View analytics"
         </div>
       </div>
-        )}
 
       {/* ATSN Content Modal */}
       {showContentModal && selectedContentForModal && (
