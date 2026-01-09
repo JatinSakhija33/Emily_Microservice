@@ -6,6 +6,16 @@ import { onboardingAPI } from '../services/onboarding'
 import { supabase } from '../lib/supabase'
 import SideNavbar from './SideNavbar'
 
+// Tauri imports for desktop app (lazy loaded)
+const loadTauriAPI = async () => {
+  try {
+    const { listen } = await import('@tauri-apps/api/event')
+    return listen
+  } catch (e) {
+    return null // Not in desktop environment
+  }
+}
+
 // Get dark mode state from localStorage or default to light mode
 const getDarkModePreference = () => {
   const saved = localStorage.getItem('darkMode')
@@ -190,6 +200,20 @@ function EmilyDashboard() {
 
   // Listen for dark mode changes from other components (like SideNavbar)
   useStorageListener('darkMode', setIsDarkMode)
+
+  // Listen for Tauri app updates (desktop only)
+  useEffect(() => {
+    const setupTauriListener = async () => {
+      const listenFn = await loadTauriAPI()
+      if (listenFn) {
+        const unlisten = await listenFn('tauri://update-available', ({ payload }) => {
+          showInfo('Update Available', 'A new version of ATSN AI is ready. The app will restart to install it.')
+        })
+        return () => unlisten()
+      }
+    }
+    setupTauriListener()
+  }, [])
 
 // Date filtering removed - chatbot starts fresh
 

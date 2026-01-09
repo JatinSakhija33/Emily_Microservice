@@ -11,7 +11,10 @@
     "preview": "vite preview",
     "preview:prod": "vite preview --mode production",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@blocknote/core": "^0.41.1",
@@ -23,6 +26,8 @@
     "@react-three/drei": "^9.88.13",
     "@react-three/fiber": "^8.15.19",
     "@supabase/supabase-js": "^2.38.0",
+    "@tauri-apps/api": "^2.9.1",
+    "@tauri-apps/cli": "^2.9.6",
     "@tiptap/extensions": "^3.14.0",
     "axios": "^1.6.2",
     "framer-motion": "^12.23.26",

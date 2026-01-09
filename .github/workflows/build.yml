@@ -1,0 +1,61 @@
+name: Build and Release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-20.04, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './frontend/src-tauri -> target'
+
+      - name: Sync node version and setup cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm install --frozen-lockfile
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+        with:
+          projectPath: './frontend'
+          tauriScript: npm run tauri:build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.platform }}
+          path: |
+            frontend/src-tauri/target/release/bundle/**/*
+            !frontend/src-tauri/target/release/bundle/macos/**/.DS_Store
