@@ -163,11 +163,11 @@ async def chat(
             logger.debug(f"Generated new session_id: {session_id} for user {user_id}")
 
         # Save user message to daily cache
-            user_message_data = {
-                "message_type": "user",
-                "content": chat_message.message,
-                "agent_name": "atsn"
-            }
+        user_message_data = {
+            "message_type": "user",
+            "content": chat_message.message,
+            "agent_name": "atsn"
+        }
         daily_cache.add_message_to_session(user_id, session_id, user_message_data)
         logger.info(f"Stored user message in cache for session {session_id}: {chat_message.message[:50]}...")
 
