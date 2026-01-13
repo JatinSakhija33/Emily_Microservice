@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS created_content (
     images TEXT[] DEFAULT '{}', -- Array of image URLs
     status TEXT DEFAULT 'generated', -- generated, draft, published
     metadata JSONB DEFAULT '{}'::jsonb,
+    rl_post_id TEXT, -- RL Agent post ID for tracking
+    rl_action_id TEXT, -- RL Agent action ID for learning
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

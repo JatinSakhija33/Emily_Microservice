@@ -47,6 +47,14 @@ import google.generativeai as genai
 import openai
 import aiohttp
 from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Load environment early so RL imports see env vars
+load_dotenv()
+
+# Configure logging early so RL import errors can log
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 CONTENT_TYPE_FILTERS = {
     "static_post",
@@ -57,9 +65,87 @@ CONTENT_TYPE_FILTERS = {
     "blog"
 }
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# RL Agent Direct Integration (import from rl_agent / rl_agents folder)
+import sys
+import pprint
+import traceback
+
+RL_AGENT_AVAILABLE = False
+_rl_import_error = None
+
+# Use absolute paths to avoid CWD issues
+_atsn_dir = os.path.dirname(os.path.abspath(__file__))
+_backend_dir = os.path.dirname(_atsn_dir)
+_rl_paths = [
+    os.path.join(_backend_dir, 'rl_agent'),
+    os.path.join(_backend_dir, 'rl_agents'),
+]
+
+_import_log = {
+    "cwd": os.getcwd(),
+    "atsn_file": __file__,
+    "atsn_dir": _atsn_dir,
+    "backend_dir": _backend_dir,
+    "candidate_paths": _rl_paths,
+    "paths_exist": [os.path.exists(p) for p in _rl_paths],
+    "paths_isdir": [os.path.isdir(p) for p in _rl_paths],
+    "sys_path_head": sys.path[:5],
+    "supabase_url_set": bool(os.getenv("SUPABASE_URL")),
+    "supabase_key_set": bool(os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")),
+}
+
+for _p in _rl_paths:
+    _abs_path = os.path.abspath(_p)
+    if os.path.isdir(_abs_path):
+        logger.info(f"🔍 Attempting RL agent import from: {_abs_path}")
+        sys.path.insert(0, _abs_path)  # Prioritize RL agent modules
+        try:
+            from rl_agent_main import run_one_post as rl_run_one_post
+            from generate import generate_prompts, embed_topic, generate_topic
+            from content_generation import generate_content as rl_generate_content
+            from db import get_profile_business_data, get_profile_embedding_with_fallback, insert_action, insert_post_content
+
+            RL_AGENT_AVAILABLE = True
+            logger.info(f"✅ RL Agent modules imported successfully from '{_abs_path}'")
+            logger.info("=" * 80)
+            logger.info("✅ RL AGENT INTEGRATION: READY")
+            logger.info("=" * 80)
+            print(f"✅ RL Agent modules imported successfully from '{_abs_path}'")
+            print("=" * 80)
+            print("✅ RL AGENT INTEGRATION: READY")
+            print("=" * 80)
+            break
+        except Exception as _e:
+            _rl_import_error = _e
+            RL_AGENT_AVAILABLE = False
+            logger.warning(f"⚠️ Failed to import RL agent from {_abs_path}: {_e}")
+            # Remove failed path from sys.path
+            if _abs_path in sys.path:
+                sys.path.remove(_abs_path)
+            # Try next path if available
+
+if not RL_AGENT_AVAILABLE:
+    err_detail = repr(_rl_import_error) if _rl_import_error else "unknown import error"
+    logger.error("=" * 80)
+    logger.error("❌ RL AGENT INTEGRATION: FAILED")
+    logger.error("=" * 80)
+    logger.error(f"   Last error: {err_detail}")
+    logger.error(f"   Import context: {_import_log}")
+    print("=" * 80)
+    print("❌ RL AGENT INTEGRATION: FAILED")
+    print("=" * 80)
+    print(f"   Last error: {err_detail}")
+    print("   Import context:")
+    try:
+        pprint.pp(_import_log)
+    except Exception:
+        print(_import_log)
+    # Also log stack trace for server logs
+    if _rl_import_error:
+        logger.error("Full traceback:")
+        logger.error(traceback.format_exc())
+        print("\nFull traceback:")
+        traceback.print_exc()
 
 
 def get_contextual_suggestion(field_type: str, conversation_context: str, all_options: List[Dict]) -> str:
@@ -5709,6 +5795,136 @@ async def execute_action(state: AgentState) -> AgentState:
     return state
 
 
+# ==================== RL AGENT INTEGRATION ====================
+
+async def generate_content_with_rl_agent(profile_id: str, topic: str, platform: str = "instagram") -> dict:
+    """
+    Generate content using the RL agent directly (no HTTP calls)
+
+    Args:
+        profile_id: Business profile ID (same as user_id in ATSN)
+        topic: User-provided topic
+        platform: Target platform
+
+    Returns:
+        dict with generated_caption, generated_image_url, etc.
+    """
+    if not RL_AGENT_AVAILABLE:
+        error_msg = "RL Agent modules not available - cannot generate content"
+        logger.error(f"❌ {error_msg}")
+        raise Exception(error_msg)
+
+    try:
+        logger.info(f"🤖 Using RL Agent directly for topic '{topic}' on {platform}")
+
+        # Get business profile data (similar to RL agent's approach)
+        profile_data = get_profile_business_data(profile_id)
+        if not profile_data:
+            return {"success": False, "error": f"No profile data found for {profile_id}"}
+
+        # Get business embedding
+        business_embedding = get_profile_embedding_with_fallback(profile_id)
+        if business_embedding is None:
+            return {"success": False, "error": f"No business embedding found for {profile_id}"}
+
+        # Create topic embedding
+        topic_embedding = embed_topic(topic)
+
+        # Prepare inputs for RL agent
+        inputs = {
+            "BUSINESS_AESTHETIC": profile_data["brand_voice"],
+            "BUSINESS_TYPES": profile_data["business_types"],
+            "INDUSTRIES": profile_data["industries"],
+            "BUSINESS_DESCRIPTION": profile_data["business_description"],
+        }
+
+        # Use RL agent to generate prompts
+        result = generate_prompts(
+            inputs=inputs,
+            business_embedding=business_embedding,
+            topic_embedding=topic_embedding,
+            platform=platform.lower(),
+            time="morning",  # Default time bucket
+            topic_text=topic,
+            profile_data=profile_data,
+            business_context=str(profile_data),
+        )
+
+        # Extract action and context from RL result
+        action = result.get("action")
+        context = result.get("context", {})
+        
+        # Extract prompts from RL result (with fallbacks)
+        caption_prompt = result.get("caption_prompt")
+        image_prompt = result.get("image_prompt")
+
+        # Use fallback prompts if not provided by RL agent
+        if not image_prompt:
+            image_prompt = f"Create an image with {action.get('VISUAL_STYLE', 'modern')} style, {action.get('TONE', 'professional')} tone, {action.get('CREATIVITY', 'balanced')} creativity level. The topic is {topic}. Make it engaging for {platform}. Do not include caption in the image directly. Just learn from the caption and generate the image."
+        
+        if not caption_prompt:
+            caption_prompt = f"Write a {action.get('TONE', 'professional')} caption in {action.get('INFORMATION_DEPTH', 'medium')} length with {action.get('CREATIVITY', 'balanced')} creativity level. The topic is {topic}. Make it suitable for {platform}."
+
+        # Generate actual content using RL agent's content generation
+        content_result = rl_generate_content(
+            caption_prompt=caption_prompt,
+            image_prompt=image_prompt,
+            business_context=profile_data,
+            logo_url=profile_data.get("logo_url"),
+            business_id=profile_id
+        )
+
+        if content_result["status"] == "success":
+            # Generate post_id (same format as RL agent)
+            post_id = f"{platform.lower()}_{uuid.uuid4().hex[:8]}"
+            
+            # Store RL action
+            action_id = insert_action(
+                post_id=post_id,
+                platform=platform.lower(),
+                context=context,
+                action=action
+            )
+            
+            # Store post content in post_contents table
+            insert_post_content(
+                post_id=post_id,
+                action_id=action_id,
+                platform=platform.lower(),
+                business_id=profile_id,
+                topic=topic,
+                image_prompt=image_prompt,
+                caption_prompt=caption_prompt,
+                generated_caption=content_result["caption"],
+                generated_image_url=content_result["image_url"]
+            )
+            
+            logger.info(f"✅ RL Agent content saved to post_contents table (post_id: {post_id}, action_id: {action_id})")
+            
+            return {
+                "success": True,
+                "caption": content_result["caption"],
+                "image_url": content_result["image_url"],
+                "post_id": post_id,
+                "action_id": action_id,
+                "rl_action": action,  # Include RL action for reference
+                "rl_mode": result.get("mode", "standard")
+            }
+        else:
+            return {"success": False, "error": f"Content generation failed: {content_result.get('error', 'Unknown error')}"}
+
+    except Exception as e:
+        logger.error(f"Error calling RL Agent directly: {e}")
+        return {"success": False, "error": f"RL Agent error: {str(e)}"}
+
+
+def extract_hashtags_from_caption(caption: str) -> list:
+    """Extract hashtags from RL-generated caption"""
+    import re
+    hashtags = re.findall(r'#\w+', caption)
+    return hashtags
+
+
 # ==================== CONTENT HANDLERS ====================
 
 async def handle_create_content(state: AgentState) -> AgentState:
@@ -5790,47 +6006,39 @@ async def handle_create_content(state: AgentState) -> AgentState:
         content_type = payload.get('content_type', '')
 
         if content_type == 'static_post':
-            # Step 1: Get trends from Grok API for trend-aware content
+            # Use RL Agent for content generation with user-provided topic
             topic = payload.get('content_idea', '')
-            trends_data = await get_trends_from_grok(topic, business_context)
-            parsed_trends = parse_trends_for_content(trends_data)
+            platform = payload.get('platform', 'Instagram').lower()
 
-            # Step 2: Get platform-specific prompt
-            platform = payload.get('platform', 'Instagram')
-            prompt = get_platform_specific_prompt(platform, payload, business_context, parsed_trends, profile_assets)
+            logger.info(f"🤖 Using RL Agent to generate content for topic: '{topic}' on {platform}")
 
-            # Log the complete prompt being sent to LLM
-            logger.info(f"📝 Complete prompt being sent to GPT-4o-mini for {platform}:")
-            logger.info("=" * 80)
-            logger.info(prompt)
-            logger.info("=" * 80)
+            # Call RL Agent API
+            rl_result = await generate_content_with_rl_agent(
+                profile_id=state.user_id,  # Use the business profile ID
+                topic=topic,
+                platform=platform
+            )
 
-            llm_response_text = ""
-            if openai_client:
-                try:
-                    response = openai_client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[{"role": "user", "content": prompt}],
-                        max_tokens=700,
-                        temperature=0.75
-                    )
-                    llm_response_text = response.choices[0].message.content.strip()
-                except Exception as response_error:
-                    logger.error(f"❌ Static post LLM generation failed: {response_error}")
-                    llm_response_text = ""
+            if rl_result["success"]:
+                # Use RL-generated content
+                content_data['title'] = f"Post about {topic[:50]}"
+                content_data['content'] = rl_result["caption"]
+                content_data['hashtags'] = extract_hashtags_from_caption(rl_result["caption"])
+                content_data['images'] = [rl_result["image_url"]] if rl_result.get("image_url") else []  # Store the RL-generated image as a list
+
+                # Store RL metadata for learning
+                content_data['rl_post_id'] = rl_result["post_id"]
+                content_data['rl_action_id'] = rl_result["action_id"]
+
+                generated_content = f"{content_data['title']}\n\n{content_data['content']}\n\n{' '.join(content_data['hashtags'])}"
+
+                logger.info("✅ RL Agent generated content successfully")
+
             else:
-                logger.warning("OpenAI client unavailable for static post generation")
-
-            parsed_content = parse_instagram_response(llm_response_text) if llm_response_text else {
-                "title": f"{payload.get('content_idea', '')[:50]}",
-                "content": payload.get('content', payload.get('content_idea', '')),
-                "hashtags": []
-            }
-
-            content_data['title'] = parsed_content.get('title') or (payload.get('content_idea', '')[:60])
-            content_data['content'] = parsed_content.get('content') or payload.get('content', payload.get('content_idea', ''))
-            content_data['hashtags'] = parsed_content.get('hashtags', [])
-            generated_content = f"{content_data['title']}\n\n{content_data['content']}\n\n{' '.join(content_data['hashtags'])}"
+                # RL Agent failed - do not fallback, raise error
+                error_msg = f"RL Agent failed to generate content: {rl_result['error']}"
+                logger.error(f"❌ {error_msg}")
+                raise Exception(error_msg)
 
         elif content_type == 'carousel':
             # CAROUSEL POST GENERATION
@@ -9277,6 +9485,27 @@ def main():
     print("\nTip: Set SUPABASE_URL and SUPABASE_KEY to use real database")
     print("   Otherwise, mock data will be displayed.")
 
+
+# Test function for RL Agent integration
+async def test_rl_agent_integration():
+    """Test the RL agent integration"""
+    print("🧪 Testing RL Agent Integration...")
+
+    # Test the RL agent function
+    result = await generate_content_with_rl_agent(
+        profile_id="test_user_123",
+        topic="productivity tips for entrepreneurs",
+        platform="instagram"
+    )
+
+    print(f"RL Agent Result: {result}")
+
+    # Test hashtag extraction
+    if result["success"]:
+        hashtags = extract_hashtags_from_caption(result["caption"])
+        print(f"Extracted hashtags: {hashtags}")
+
+    return result
 
 if __name__ == "__main__":
     main()
