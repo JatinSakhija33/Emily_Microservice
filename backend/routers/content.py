@@ -326,7 +326,6 @@ async def get_created_content(
         logger.error(f"Error getting created content: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/debug/status")
 async def debug_status_values(current_user: User = Depends(get_current_user)):
     """Debug endpoint to check RAW status values in created_content table (no fallbacks)"""

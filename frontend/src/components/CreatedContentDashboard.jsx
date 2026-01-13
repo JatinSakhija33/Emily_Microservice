@@ -525,18 +525,47 @@ function CreatedContentDashboard() {
         return
       }
 
-      // Get the best image URL for posting
-      const imageUrl = getBestImageUrl(itemToPublish)
-      console.log('📸 Publishing to', platform, 'with image URL:', imageUrl)
+      // Check if this is carousel content
+      const isCarousel = itemToPublish.post_type === 'carousel' ||
+                         itemToPublish.content_type?.toLowerCase() === 'carousel' ||
+                         itemToPublish.selected_content_type?.toLowerCase() === 'carousel' ||
+                         (itemToPublish.metadata && itemToPublish.metadata.carousel_images && itemToPublish.metadata.carousel_images.length > 0) ||
+                         (itemToPublish.carousel_images && itemToPublish.carousel_images.length > 0) ||
+                         (itemToPublish.metadata && itemToPublish.metadata.total_images && itemToPublish.metadata.total_images > 1)
 
-      // Validate that we have an image URL for Instagram
-      if (platform === 'instagram' && !imageUrl) {
+      // Get carousel images if it's carousel content
+      let carouselImages = []
+      if (isCarousel) {
+        // Check multiple locations for carousel images - prioritize metadata.carousel_images
+        if (itemToPublish.metadata?.carousel_images && Array.isArray(itemToPublish.metadata.carousel_images) && itemToPublish.metadata.carousel_images.length > 0) {
+          carouselImages = itemToPublish.metadata.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img))
+        } else if (itemToPublish.carousel_images && Array.isArray(itemToPublish.carousel_images) && itemToPublish.carousel_images.length > 0) {
+          carouselImages = itemToPublish.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img))
+        } else if (itemToPublish.metadata?.images && Array.isArray(itemToPublish.metadata.images) && itemToPublish.metadata.images.length > 0) {
+          carouselImages = itemToPublish.metadata.images.map(img => typeof img === 'string' ? img : (img.url || img))
+        } else if (itemToPublish.images && Array.isArray(itemToPublish.images) && itemToPublish.images.length > 0) {
+          carouselImages = itemToPublish.images.map(img => typeof img === 'object' && img.image_url ? img.image_url : (typeof img === 'string' ? img : img))
+        }
+      }
+
+      // Get the best image URL for posting (for single image posts)
+      const imageUrl = getBestImageUrl(itemToPublish)
+      console.log('📸 Publishing to', platform, isCarousel ? `with carousel (${carouselImages.length} images):` : 'with image URL:', isCarousel ? carouselImages : imageUrl)
+
+      // Validate that we have images for carousel content
+      if (platform === 'facebook' && isCarousel && carouselImages.length === 0) {
+        showError('Facebook carousel posts require multiple images. Please ensure the content has carousel images.')
+        return
+      }
+
+      // Validate that we have an image URL for Instagram (single image posts only)
+      if (platform === 'instagram' && !isCarousel && !imageUrl) {
         showError('Instagram posts require an image. Please ensure the content has an associated image.')
         return
       }
 
       // For Instagram, ensure the image URL is publicly accessible
-      if (platform === 'instagram' && imageUrl) {
+      if (platform === 'instagram' && !isCarousel && imageUrl) {
         const isSupabaseUrl = imageUrl.includes('supabase.co') && imageUrl.includes('/storage/v1/object/public/')
         if (!isSupabaseUrl) {
           showError('Instagram requires images to be publicly accessible. Please re-upload the image or use a different platform.')
@@ -551,7 +580,11 @@ function CreatedContentDashboard() {
         content_id: itemToPublish.id
       }
 
-      if (imageUrl) {
+      // Handle carousel vs single image posts
+      if (isCarousel && carouselImages.length > 0) {
+        postBody.post_type = 'carousel'
+        postBody.carousel_images = carouselImages
+      } else if (imageUrl) {
         postBody.image_url = imageUrl
       }
 

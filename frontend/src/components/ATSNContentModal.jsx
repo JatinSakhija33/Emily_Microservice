@@ -118,10 +118,72 @@ const ATSNContentModal = ({
     }
   }, [content])
 
+  // Fetch fresh carousel images from database
+  const fetchFreshCarouselImages = useCallback(async () => {
+    if (!content?.id) return
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
+      if (!token) {
+        console.warn('No auth token available for fetching fresh carousel images')
+        return
+      }
+
+      // Fetch all created content but limit to recent items for efficiency
+      const response = await fetch(`${API_BASE_URL}/content/created?limit=100`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (response.ok) {
+        const allContent = await response.json()
+        const freshContent = allContent.find(item => item.id === content.id)
+
+        if (!freshContent) {
+          console.warn('Content item not found in recent results, content may be older')
+          return
+        }
+
+        // Extract carousel images from fresh data
+        const isCarousel = freshContent.post_type === 'carousel' ||
+                         freshContent.content_type?.toLowerCase() === 'carousel' ||
+                         freshContent.selected_content_type?.toLowerCase() === 'carousel' ||
+                         (freshContent.metadata && freshContent.metadata.carousel_images && freshContent.metadata.carousel_images.length > 0) ||
+                         (freshContent.carousel_images && freshContent.carousel_images.length > 0) ||
+                         (freshContent.metadata && freshContent.metadata.total_images && freshContent.metadata.total_images > 1)
+
+        let carouselImages = []
+        if (isCarousel) {
+          // Check multiple locations for carousel images - prioritize metadata.carousel_images
+          if (freshContent.metadata?.carousel_images && Array.isArray(freshContent.metadata.carousel_images) && freshContent.metadata.carousel_images.length > 0) {
+            carouselImages = freshContent.metadata.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img))
+          } else if (freshContent.carousel_images && Array.isArray(freshContent.carousel_images) && freshContent.carousel_images.length > 0) {
+            carouselImages = freshContent.carousel_images.map(img => typeof img === 'string' ? img : (img.url || img))
+          } else if (freshContent.metadata?.images && Array.isArray(freshContent.metadata.images) && freshContent.metadata.images.length > 0) {
+            carouselImages = freshContent.metadata.images.map(img => typeof img === 'string' ? img : (img.url || img))
+          } else if (freshContent.images && Array.isArray(freshContent.images) && freshContent.images.length > 0) {
+            carouselImages = freshContent.images.map(img => typeof img === 'object' && img.image_url ? img.image_url : (typeof img === 'string' ? img : img))
+          }
+        }
+
+        console.log('Fresh carousel images fetched from database:', carouselImages.length, 'images')
+        setCarouselImages(carouselImages)
+      } else {
+        console.warn('Failed to fetch fresh carousel images:', response.statusText)
+      }
+    } catch (error) {
+      console.error('Error fetching fresh carousel images:', error)
+    }
+  }, [content?.id])
+
   // Detect carousel content and extract carousel images
   useEffect(() => {
     if (content) {
-      // Check if this is a carousel post - enhanced detection
+      // First, try to use the content prop data as fallback
       const isCarousel = content.post_type === 'carousel' ||
                          content.content_type?.toLowerCase() === 'carousel' ||
                          content.selected_content_type?.toLowerCase() === 'carousel' ||
@@ -144,9 +206,13 @@ const ATSNContentModal = ({
         }
       }
 
+      // Set initial carousel images from props
       setCarouselImages(carouselImages)
+
+      // Then fetch fresh data from database
+      fetchFreshCarouselImages()
     }
-  }, [content])
+  }, [content, fetchFreshCarouselImages])
 
   // Edit handlers
   const handleEdit = () => {
@@ -2003,10 +2069,11 @@ const ATSNContentModal = ({
         <CarouselImageSelector
           images={carouselImages}
           selectedImage={selectedCarouselImage}
-          onImageSelect={(image) => {
-            setSelectedCarouselImage(image)
+          onImageSelect={(imageUrl) => {
+            setSelectedCarouselImage(imageUrl)
             setShowCarouselImageSelector(false)
-            handleImageEdit(image)
+            // Open image editor for the selected carousel image
+            handleImageEdit(imageUrl)
           }}
           onClose={() => {
             setShowCarouselImageSelector(false)
@@ -2015,6 +2082,7 @@ const ATSNContentModal = ({
           isDarkMode={isDarkMode}
         />
       )}
+
 
     </div>
   )
