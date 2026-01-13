@@ -13,26 +13,11 @@ from typing import List
 
 
 BASE_META_OAUTH_SCOPES: List[str] = [
-    "pages_show_list",
-    "pages_read_engagement",
-    "pages_read_user_content",  # Required to read Page posts
-    "pages_manage_metadata",
-    "pages_manage_posts",
-    "pages_manage_engagement",
-    "pages_manage_ads",
-    "pages_messaging",
-    "leads_retrieval",
-    "read_insights",
     "instagram_basic",
-    "instagram_manage_comments",
-    "instagram_manage_messages",
+    "pages_read_engagement",
     "instagram_content_publish",
-    "instagram_manage_insights",
-    "whatsapp_business_management",
-    "whatsapp_business_messaging",
-    "ads_management",
-    "ads_read",
-    "business_management",
+    "pages_manage_posts",
+    "read_insights",
 ]
 
 OPTIONAL_META_OAUTH_SCOPES: List[str] = []
