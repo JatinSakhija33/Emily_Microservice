@@ -313,7 +313,9 @@ async def whatsapp_oauth_callback(
 
         # First, get the user's business accounts
         business_accounts_url = f"{WHATSAPP_GRAPH_URL}/me/businesses"
+        logger.info(f"Getting business accounts from: {business_accounts_url}")
         business_response = requests.get(business_accounts_url, headers=headers, timeout=30)
+        logger.info(f"Business accounts response status: {business_response.status_code}")
 
         if not business_response.ok:
             logger.error(f"Failed to get business accounts: {business_response.text}")
@@ -324,34 +326,49 @@ async def whatsapp_oauth_callback(
 
         business_data = business_response.json()
         business_accounts = business_data.get("data", [])
+        logger.info(f"Found {len(business_accounts)} business accounts")
 
         if not business_accounts:
+            logger.warning("No business accounts found. This might be because the app is not linked to a business account.")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No WhatsApp Business accounts found. Please create a WhatsApp Business account first."
+                detail="No WhatsApp Business accounts found. Please ensure your Meta app is connected to a Business account in Meta Business Manager."
             )
 
         # For each business account, get WhatsApp Business Accounts
         whatsapp_accounts = []
         for business in business_accounts:
             business_id = business.get("id")
+            logger.info(f"Checking business account: {business_id}")
 
             # Get WhatsApp Business Accounts for this business
             waba_url = f"{WHATSAPP_GRAPH_URL}/{business_id}/whatsapp_business_accounts"
+            logger.info(f"Getting WABA from: {waba_url}")
             waba_response = requests.get(waba_url, headers=headers, timeout=30)
+            logger.info(f"WABA response status: {waba_response.status_code}")
 
             if waba_response.ok:
                 waba_data = waba_response.json()
-                for waba in waba_data.get("data", []):
+                wabas = waba_data.get("data", [])
+                logger.info(f"Found {len(wabas)} WhatsApp Business Accounts for business {business_id}")
+
+                for waba in wabas:
                     waba_id = waba.get("id")
+                    logger.info(f"Checking WABA: {waba_id}")
 
                     # Get phone numbers for this WhatsApp Business Account
                     phones_url = f"{WHATSAPP_GRAPH_URL}/{waba_id}/phone_numbers"
+                    logger.info(f"Getting phone numbers from: {phones_url}")
                     phones_response = requests.get(phones_url, headers=headers, timeout=30)
+                    logger.info(f"Phone numbers response status: {phones_response.status_code}")
 
                     if phones_response.ok:
                         phones_data = phones_response.json()
-                        for phone in phones_data.get("data", []):
+                        phones = phones_data.get("data", [])
+                        logger.info(f"Found {len(phones)} phone numbers for WABA {waba_id}")
+
+                        for phone in phones:
+                            logger.info(f"Phone found: {phone.get('display_phone_number')} (ID: {phone.get('id')})")
                             whatsapp_accounts.append({
                                 "business_account_id": business_id,
                                 "whatsapp_business_account_id": waba_id,
@@ -359,11 +376,21 @@ async def whatsapp_oauth_callback(
                                 "phone_number": phone.get("display_phone_number"),
                                 "verified_name": phone.get("verified_name")
                             })
+                    else:
+                        logger.error(f"Failed to get phone numbers for WABA {waba_id}: {phones_response.text}")
+            else:
+                logger.error(f"Failed to get WABA for business {business_id}: {waba_response.text}")
+
+        logger.info(f"Total WhatsApp accounts found: {len(whatsapp_accounts)}")
 
         if not whatsapp_accounts:
+            logger.warning("No WhatsApp accounts found. This might be because:")
+            logger.warning("1. No phone numbers are connected to your WhatsApp Business API")
+            logger.warning("2. The phone numbers are not verified")
+            logger.warning("3. The business account is not properly linked to the app")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No verified WhatsApp phone numbers found. Please verify a phone number in your WhatsApp Business account."
+                detail="No verified WhatsApp phone numbers found. Please ensure your phone number (+91 99981 97993) is properly connected to your WhatsApp Business API in the Meta console."
             )
 
         # Use the first available WhatsApp account (user can manage multiple later if needed)
