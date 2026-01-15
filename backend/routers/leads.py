@@ -21,6 +21,7 @@ from functools import wraps
 
 from agents.lead_management_agent import LeadManagementAgent
 from services.whatsapp_service import WhatsAppService
+from services.authkey_whatsapp_service import AuthKeyWhatsAppService
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import openai
@@ -145,6 +146,18 @@ class AddRemarkRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     message: str
     message_type: str = "whatsapp"  # whatsapp or email
+
+
+class SendAuthKeyWhatsAppRequest(BaseModel):
+    """AuthKey-powered WhatsApp send request."""
+    message: str
+    template_id: Optional[str] = None  # wid
+    body_values: Optional[Dict[str, str]] = None  # {"1": "value", "2": "value"}
+    header_filename: Optional[str] = None
+    header_data_url: Optional[str] = None
+    template_type: Optional[str] = "text"  # text or media
+    country_code: Optional[str] = None  # optional override
+    phone_number: Optional[str] = None  # optional override (falls back to lead phone)
 
 class GenerateEmailRequest(BaseModel):
     template: Optional[str] = "welcome"  # welcome, follow-up, inquiry, custom
@@ -1886,6 +1899,66 @@ async def send_message_to_lead(
         raise
     except Exception as e:
         logger.error(f"Error sending message: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{lead_id}/whatsapp/authkey")
+async def send_whatsapp_authkey_to_lead(
+    lead_id: str,
+    request: SendAuthKeyWhatsAppRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Send WhatsApp message to a lead using AuthKey console APIs.
+    Supports plain text or template-based sends.
+    """
+    try:
+        if not request.message and not request.template_id:
+            raise HTTPException(status_code=400, detail="Message or template_id is required")
+
+        # Verify lead belongs to user
+        lead = supabase_admin.table("leads").select("*").eq("id", lead_id).eq("user_id", current_user["id"]).execute()
+        if not lead.data:
+            raise HTTPException(status_code=404, detail="Lead not found")
+
+        lead_data = lead.data[0]
+        phone_number = request.phone_number or lead_data.get("phone_number")
+        if not phone_number:
+            raise HTTPException(status_code=400, detail="Lead has no phone number")
+
+        service = AuthKeyWhatsAppService()
+
+        # Decide text vs template flow
+        if request.template_id:
+            result = service.send_template(
+                phone_number=phone_number,
+                template_id=request.template_id,
+                body_values=request.body_values,
+                header_filename=request.header_filename,
+                header_data_url=request.header_data_url,
+                template_type=request.template_type or "text",
+            )
+            content_logged = f"TEMPLATE {request.template_id} | vars={request.body_values or {}}"
+        else:
+            result = service.send_text(phone_number=phone_number, message=request.message)
+            content_logged = request.message
+
+        # Record conversation
+        supabase_admin.table("lead_conversations").insert({
+            "lead_id": lead_id,
+            "message_type": "whatsapp",
+            "content": content_logged,
+            "sender": "agent",
+            "direction": "outbound",
+            "status": "sent"
+        }).execute()
+
+        return {"success": True, "data": result.get("data")}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending AuthKey WhatsApp message: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # WhatsApp Connection Request Model

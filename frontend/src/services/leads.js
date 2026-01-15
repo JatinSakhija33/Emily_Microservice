@@ -181,6 +181,45 @@ export const leadsAPI = {
   },
 
   /**
+   * Send WhatsApp message to lead via AuthKey service
+   * @param {string} leadId - Lead ID
+   * @param {Object} payload - Message payload
+   * @param {string} payload.template_id - AuthKey template ID (wid) - REQUIRED
+   * @param {Object} payload.body_values - Template variables { "1": "value" }
+   * @param {string} payload.header_filename - Optional header filename for media template
+   * @param {string} payload.header_data_url - Optional media URL for header
+   * @param {string} payload.template_type - text | media
+   * @param {string} payload.country_code - Optional override country code
+   * @param {string} payload.phone_number - Optional override phone
+   * @returns {Promise} API response
+   */
+  sendWhatsAppAuthKeyToLead: (leadId, payload) => {
+    if (!payload.template_id) {
+      throw new Error('AuthKey requires template_id. Create a template in AuthKey console first.')
+    }
+    return api.post(`/leads/${leadId}/whatsapp/authkey`, payload)
+  },
+
+  /**
+   * Save or update per-user AuthKey WhatsApp credentials
+   * @param {Object} payload
+   * @param {string} payload.authkey - AuthKey API key (required)
+   * @param {string} payload.default_country_code - Optional default country code (e.g., "91")
+   * @returns {Promise} API response
+   */
+  saveAuthKeyConfig: (payload) => {
+    return api.post('/leads/whatsapp/authkey/config', payload)
+  },
+
+  /**
+   * Get current user's AuthKey WhatsApp configuration (without exposing secret if hidden by backend)
+   * @returns {Promise} API response
+   */
+  getAuthKeyConfig: () => {
+    return api.get('/leads/whatsapp/authkey/config')
+  },
+
+  /**
    * Get WhatsApp connection for current user
    * @returns {Promise} API response with WhatsApp connection object
    */

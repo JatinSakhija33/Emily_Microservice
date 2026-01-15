@@ -475,6 +475,12 @@ class SocialMediaService {
         color: 'bg-white',
         icon: 'https://logo.svgcdn.com/d/google-original.svg',
         description: 'Connect Gmail, Drive, Sheets, and Docs'
+      },
+      whatsapp: {
+        name: 'WhatsApp Business',
+        color: 'bg-green-600',
+        icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTguNTQ1IDYuODg3QzguNTQ1IDYuNzE5IDguMzc3IDYuNTUxIDguMjA5IDYuNTUxSDYuNDc5QzYuMzExIDYuNTUxIDYuMTQzIDYuNzE5IDYuMTQzIDYuODg3VjguOTU2QzYuMTQzIDkuMTI0IDYuMzExIDkuMzAyIDYuNDc5IDkuMzAySDguMjA5QzguMzc3IDkuMzAyIDguNTQ1IDkuMTI0IDguNTQ1IDguOTU2VjYuODg3Wk0xMS42NjMgMTIuNzIyQzEwLjM1OCAxMi43MjIgOC4zNTggMTEuNTY5IDguMzU4IDEwLjE3N1Y5Ljg0MUM4LjM1OCA4LjQ1NCA5LjU2MiA3LjMwMSA5Ljk5NyAzLjM3MUM5Ljg0NyAyLjc4MiA5LjY5OCAyLjE5MiA5LjU0OCAyLjE5Mkg5LjM5OUM5LjI0OSAyLjE5MiA5LjA5OSAyLjM4IDUuOTUgMi41ODlMMTEuNjYzIDEyLjcyMloiIGZpbGw9IndoaXRlIi8+Cjwvc3ZnPg==',
+        description: 'Send and receive WhatsApp messages'
       }
     }
     return platforms[platform] || { name: platform, color: 'bg-gray-500', icon: Globe, description: 'Social media platform' }

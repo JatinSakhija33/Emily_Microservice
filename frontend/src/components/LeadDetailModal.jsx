@@ -272,7 +272,16 @@ const LeadDetailModal = ({ lead, onClose, onUpdate, isDarkMode = false }) => {
 
     try {
       setSendingMessage(true)
-      await leadsAPI.sendMessageToLead(lead.id, newMessage, messageType)
+
+      if (messageType === 'whatsapp') {
+        // Use AuthKey WhatsApp service for leads
+        await leadsAPI.sendWhatsAppAuthKeyToLead(lead.id, {
+          message: newMessage.trim()
+        })
+      } else {
+        await leadsAPI.sendMessageToLead(lead.id, newMessage, messageType)
+      }
+
       showSuccess('Message Sent', `Message sent via ${messageType}`)
       setNewMessage('')
       fetchConversations()

@@ -120,13 +120,45 @@ export const fetchAllConnections = async (useCache = true) => {
     if (existingGoogleConnection) {
       googleConnections = [existingGoogleConnection]
     }
+
+    // Fetch WhatsApp connection status
+    let whatsappConnections = []
+    try {
+      const authToken = await getAuthToken()
+      if (authToken) {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+        const baseUrl = API_BASE_URL.replace(/\/+$/, '')
+
+        const response = await fetch(`${baseUrl}/connections/whatsapp/connection-status`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          }
+        })
+
+        if (response.ok) {
+          const statusData = await response.json()
+          if (statusData.connected === true || statusData.connected === 'true' || statusData.status === 'connected') {
+            whatsappConnections = [{
+              platform: 'whatsapp',
+              connection_status: 'active',
+              page_name: statusData.phone_number || 'WhatsApp Business',
+              page_username: statusData.phone_number || 'WhatsApp Business'
+            }]
+          }
+        }
+      }
+    } catch (error) {
+      console.log('No WhatsApp connection found:', error.message)
+    }
     
     // Combine all types of connections
     const allConnections = [
-      ...tokenConnections.filter(conn => conn.platform !== 'google' && conn.platform !== 'wordpress'),
-      ...oauthConnections.filter(conn => conn.platform !== 'google' && conn.platform !== 'wordpress'),
+      ...tokenConnections.filter(conn => conn.platform !== 'google' && conn.platform !== 'wordpress' && conn.platform !== 'whatsapp'),
+      ...oauthConnections.filter(conn => conn.platform !== 'google' && conn.platform !== 'wordpress' && conn.platform !== 'whatsapp'),
       ...wordpressConnections,
-      ...googleConnections
+      ...googleConnections,
+      ...whatsappConnections
     ]
     
     // Remove duplicates

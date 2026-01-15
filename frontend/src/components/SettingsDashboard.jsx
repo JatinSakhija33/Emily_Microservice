@@ -186,6 +186,16 @@ const SettingsDashboard = () => {
       oauthSupported: true,
       tokenSupported: false,
       helpUrl: 'https://console.developers.google.com/'
+    },
+    {
+      id: 'whatsapp',
+      name: 'WhatsApp Business',
+      icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTguNTQ1IDYuODg3QzguNTQ1IDYuNzE5IDguMzc3IDYuNTUxIDguMjA5IDYuNTUxSDYuNDc5QzYuMzExIDYuNTUxIDYuMTQzIDYuNzE5IDYuMTQzIDYuODg3VjguOTU2QzYuMTQzIDkuMTI0IDYuMzExIDkuMzAyIDYuNDc5IDkuMzAySDguMjA5QzguMzc3IDkuMzAyIDguNTQ1IDkuMTI0IDguNTQ1IDguOTU2VjYuODg3Wk0xMS42NjMgMTIuNzIyQzEwLjM1OCAxMi43MjIgOC4zNTggMTEuNTY5IDguMzU4IDEwLjE3N1Y5Ljg0MUM4LjM1OCA4LjQ1NCA5LjU2MiA3LjMwMSA5Ljk5NyAzLjM3MUM5Ljg0NyAyLjc4MiA5LjY5OCAyLjE5MiA5LjU0OCAyLjE5Mkg5LjM5OUM5LjI0OSAyLjE5MiA5LjA5OSAyLjM4IDUuOTUgMi41ODlMMTEuNjYzIDEyLjcyMloiIGZpbGw9IndoaXRlIi8+Cjwvc3ZnPg==',
+      color: 'bg-green-600',
+      description: 'Connect WhatsApp Business account for messaging',
+      oauthSupported: true,
+      tokenSupported: false,
+      helpUrl: 'https://developers.facebook.com/docs/whatsapp/'
     }
   ]
 
@@ -336,13 +346,56 @@ const SettingsDashboard = () => {
         console.log('Found existing Google connection in OAuth:', existingGoogleConnection)
         googleConnections = [existingGoogleConnection]
       }
+
+      // Fetch WhatsApp connections
+      let whatsappConnections = []
+      try {
+        const authToken = await getAuthToken()
+        if (!authToken) {
+          console.log('No auth token available for WhatsApp connections')
+        } else {
+          const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+          const baseUrl = API_BASE_URL.replace(/\/+$/, '')
+
+          const response = await fetch(`${baseUrl}/connections/whatsapp/connection-status`, {
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+            }
+          })
+
+          if (response.ok) {
+            const statusData = await response.json()
+            console.log('WhatsApp connection status data:', statusData)
+
+            // Check if connected (handle different possible response formats)
+            if (statusData.connected === true || statusData.connected === 'true' || statusData.status === 'connected') {
+              whatsappConnections = [{
+                platform: 'whatsapp',
+                connection_status: 'active',
+                page_name: statusData.phone_number_display || statusData.phone_number || 'WhatsApp Business',
+                page_username: statusData.phone_number_display || statusData.phone_number || 'WhatsApp Business',
+                phone_number_id: statusData.phone_number_id
+              }]
+              console.log('Created WhatsApp connection:', whatsappConnections[0])
+            } else {
+              console.log('WhatsApp not connected. Status data:', statusData)
+            }
+          } else {
+            console.log('WhatsApp connection status API error:', response.status, response.statusText)
+          }
+        }
+      } catch (error) {
+        console.log('No WhatsApp connection found:', error.message)
+      }
       
       // Combine all types of connections, filtering out duplicates
       const allConnections = [
-        ...tokenConnections.filter(conn => conn.platform !== 'google' && conn.platform !== 'wordpress'),
-        ...oauthConnections.filter(conn => conn.platform !== 'google' && conn.platform !== 'wordpress'),
+        ...tokenConnections.filter(conn => conn.platform !== 'google' && conn.platform !== 'wordpress' && conn.platform !== 'whatsapp'),
+        ...oauthConnections.filter(conn => conn.platform !== 'google' && conn.platform !== 'wordpress' && conn.platform !== 'whatsapp'),
         ...wordpressConnections,
-        ...googleConnections
+        ...googleConnections,
+        ...whatsappConnections
       ]
       
       // Remove duplicate WordPress connections based on site URL and user ID
@@ -363,6 +416,7 @@ const SettingsDashboard = () => {
       console.log('OAuth connections:', oauthConnections.length)
       console.log('WordPress connections:', wordpressConnections.length)
       console.log('Google connections:', googleConnections.length)
+      console.log('WhatsApp connections:', whatsappConnections.length)
       console.log('Total connections:', allConnections.length)
       console.log('All connections platforms:', allConnections.map(c => c.platform))
       
@@ -459,6 +513,86 @@ const SettingsDashboard = () => {
     } catch (error) {
       console.error('Error getting auth token:', error)
       return null
+    }
+  }
+
+  const handleWhatsAppConnect = async () => {
+    try {
+      setLoading(true)
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+      const baseUrl = API_BASE_URL.replace(/\/+$/, '')
+
+      const authToken = await getAuthToken()
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+      }
+
+      const response = await fetch(`${baseUrl}/connections/whatsapp/initiate`, {
+        method: 'POST',
+        headers
+      })
+      const initiateData = await response.json()
+
+      if (initiateData.success) {
+        const popup = window.open(
+          initiateData.auth_url,
+          'whatsapp-oauth',
+          'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+        )
+
+        // Listen for popup messages (for OAuth completion)
+        const messageHandler = (event) => {
+          // Allow messages from the same origin or from the callback page
+          const allowedOrigins = [
+            window.location.origin,
+            'https://emily.atsnai.com',
+            'https://agent-emily.onrender.com'
+          ]
+
+          if (!allowedOrigins.includes(event.origin)) {
+            console.log('Ignoring message from origin:', event.origin)
+            return
+          }
+
+          console.log('Received WhatsApp OAuth message:', event.data, 'from origin:', event.origin)
+
+          if (event.data.type === 'OAUTH_SUCCESS') {
+            console.log('WhatsApp OAuth successful:', event.data)
+            popup.close()
+            window.removeEventListener('message', messageHandler)
+            setSuccess('WhatsApp Business account connected successfully!')
+            // Refresh connections to show the new connection
+            fetchConnections()
+          } else if (event.data.type === 'OAUTH_ERROR') {
+            console.error('WhatsApp OAuth error:', event.data.error)
+            popup.close()
+            window.removeEventListener('message', messageHandler)
+            setError(event.data.error || 'WhatsApp OAuth connection failed')
+          }
+        }
+
+        window.addEventListener('message', messageHandler)
+
+        // Check if popup was closed manually
+        const checkClosed = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(checkClosed)
+            window.removeEventListener('message', messageHandler)
+            // Refresh connections when popup is closed (in case OAuth completed)
+            console.log('Popup closed, refreshing connections...')
+            fetchConnections()
+          }
+        }, 1000)
+
+        setSuccess('WhatsApp connection window opened. Please complete the authorization.')
+      } else {
+        setError('Failed to initiate WhatsApp connection')
+      }
+    } catch (error) {
+      setError(`Failed to start WhatsApp connection: ${error.message}`)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -822,6 +956,28 @@ const SettingsDashboard = () => {
         return
       }
 
+      // Handle WhatsApp disconnect
+      if (platform === 'whatsapp') {
+        const authToken = await getAuthToken()
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/connections/whatsapp/disconnect`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+          }
+        })
+
+        const result = await response.json()
+
+        if (!response.ok) {
+          throw new Error(result.detail || 'Failed to disconnect WhatsApp')
+        }
+
+        setSuccess(result.message || 'WhatsApp account disconnected successfully')
+        fetchConnections()
+        return
+      }
+
       // Handle other platforms
       await socialMediaService.disconnectAccount(connectionId)
       setSuccess('Account disconnected successfully')
@@ -975,7 +1131,15 @@ const SettingsDashboard = () => {
                             <div className="space-y-2 sm:space-y-3">
                               {platform.oauthSupported && (
                                 <button
-                                  onClick={() => platform.id === 'google' ? handleGoogleConnect() : handleOAuthConnect(platform.id)}
+                                  onClick={() => {
+                                    if (platform.id === 'google') {
+                                      handleGoogleConnect()
+                                    } else if (platform.id === 'whatsapp') {
+                                      handleWhatsAppConnect()
+                                    } else {
+                                      handleOAuthConnect(platform.id)
+                                    }
+                                  }}
                                   className="w-full px-3 sm:px-4 py-2 sm:py-2.5 md:py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl hover:from-emerald-600 hover:to-emerald-700 flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg hover:scale-105 transform group/btn"
                                   disabled={loading}
                                 >

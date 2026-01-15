@@ -34,7 +34,8 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
     { id: 'linkedin', name: 'LinkedIn' },
     { id: 'youtube', name: 'YouTube' },
     { id: 'wordpress', name: 'WordPress' },
-    { id: 'google', name: 'Google' }
+    { id: 'google', name: 'Google' },
+    { id: 'whatsapp', name: 'WhatsApp Business' }
   ]
 
   const stopStatusPolling = () => {
@@ -291,13 +292,21 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
   }
 
   const handleConnect = async (platformId) => {
+    console.log('handleConnect called with platformId:', platformId)
+
     try {
       setLoading(true)
       setSelectedPlatform(platformId)
-      
+
       if (platformId === 'google') {
+        console.log('Connecting to Google...')
         await handleGoogleConnect()
         // Start polling for Google connection
+        startStatusPolling(platformId)
+      } else if (platformId === 'whatsapp') {
+        console.log('Connecting to WhatsApp...')
+        await handleWhatsAppConnect()
+        // Start polling for WhatsApp connection
         startStatusPolling(platformId)
       } else if (platformId === 'wordpress') {
         // Navigate to settings page for WordPress (requires credentials)
@@ -334,10 +343,10 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
         // Handle Google disconnect
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
         const baseUrl = API_BASE_URL.replace(/\/+$/, '')
-        const authToken = localStorage.getItem('authToken') || 
-                          localStorage.getItem('token') || 
+        const authToken = localStorage.getItem('authToken') ||
+                          localStorage.getItem('token') ||
                           localStorage.getItem('access_token')
-        
+
         const response = await fetch(`${baseUrl}/connections/google/disconnect`, {
           method: 'GET',
           headers: {
@@ -345,10 +354,29 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
             ...(authToken && { 'Authorization': `Bearer ${authToken}` })
           }
         })
-        
+
         const data = await response.json()
         if (!data.success) {
           throw new Error('Failed to disconnect Google')
+        }
+      } else if (platformId === 'whatsapp') {
+        // Handle WhatsApp disconnect
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+        const baseUrl = API_BASE_URL.replace(/\/+$/, '')
+        const authToken = localStorage.getItem('authToken') ||
+                          localStorage.getItem('token') ||
+                          localStorage.getItem('access_token')
+
+        const response = await fetch(`${baseUrl}/connections/whatsapp/disconnect`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to disconnect WhatsApp')
         }
       } else if (platformId === 'wordpress') {
         // Handle WordPress disconnect
@@ -455,6 +483,90 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
       }
     } catch (error) {
       console.error('Failed to start Google connection:', error)
+    }
+  }
+
+  const handleWhatsAppConnect = async () => {
+    try {
+      console.log('Starting WhatsApp connection...')
+
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
+      const baseUrl = API_BASE_URL.replace(/\/+$/, '')
+
+      const authToken = localStorage.getItem('authToken') ||
+                        localStorage.getItem('token') ||
+                        localStorage.getItem('access_token')
+      console.log('Auth token found:', !!authToken)
+
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+      }
+
+      console.log('Making request to:', `${baseUrl}/connections/whatsapp/initiate`)
+
+      const response = await fetch(`${baseUrl}/connections/whatsapp/initiate`, {
+        method: 'POST',
+        headers
+      })
+
+      console.log('Response status:', response.status)
+      console.log('Response ok:', response.ok)
+
+      const initiateData = await response.json()
+        console.log('Response data:', initiateData)
+
+        if (!response.ok) {
+          console.error('WhatsApp initiation failed:', initiateData)
+          alert(`WhatsApp connection failed: ${initiateData.detail || 'Unknown error'}\n\nPlease check your browser console for more details and ensure WHATSAPP_APP_ID and WHATSAPP_APP_SECRET are set in your environment variables.`)
+          return
+        }
+
+      if (initiateData.success) {
+        const popup = window.open(
+          initiateData.auth_url,
+          'whatsapp-oauth',
+          'width=600,height=700,scrollbars=yes,resizable=yes,status=yes,location=yes,toolbar=no,menubar=no'
+        )
+
+        const messageHandler = (event) => {
+          const allowedOrigins = [
+            window.location.origin,
+            'https://emily.atsnai.com',
+            'https://agent-emily.onrender.com'
+          ]
+
+          if (!allowedOrigins.includes(event.origin)) {
+            return
+          }
+
+          if (event.data.type === 'OAUTH_SUCCESS') {
+            popup.close()
+            window.removeEventListener('message', messageHandler)
+            // Start polling for WhatsApp connection status
+            startStatusPolling('whatsapp')
+          } else if (event.data.type === 'OAUTH_ERROR') {
+            popup.close()
+            window.removeEventListener('message', messageHandler)
+            stopStatusPolling()
+            setLoading(false)
+            setSelectedPlatform('')
+          }
+        }
+
+        window.addEventListener('message', messageHandler)
+
+        const checkClosed = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(checkClosed)
+            window.removeEventListener('message', messageHandler)
+            // Start polling when popup closes (user may have completed OAuth)
+            startStatusPolling('whatsapp')
+          }
+        }, 1000)
+      }
+    } catch (error) {
+      console.error('Failed to start WhatsApp connection:', error)
     }
   }
 
