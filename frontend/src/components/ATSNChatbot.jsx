@@ -135,6 +135,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference)
   const [likedMessages, setLikedMessages] = useState(new Set())
+  const [agentProfiles, setAgentProfiles] = useState({}) // Agent profiles with likes and tasks data
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const lastExternalConversationsRef = useRef(null)
@@ -507,6 +508,33 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     }
   }, [messages.length])
 
+  // Fetch agent profiles data
+  useEffect(() => {
+    const fetchAgentProfiles = async () => {
+      try {
+        const token = await getAuthToken()
+        if (!token) return
+
+        const response = await fetch('/api/profile/agents/profiles', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (response.ok) {
+          const profiles = await response.json()
+          setAgentProfiles(profiles)
+        } else {
+          console.error('Failed to fetch agent profiles:', response.statusText)
+        }
+      } catch (error) {
+        console.error('Error fetching agent profiles:', error)
+      }
+    }
+
+    fetchAgentProfiles()
+  }, [])
 
   // Load today's conversations (similar to Chatbot.jsx)
   const loadTodayConversations = async () => {
@@ -4992,6 +5020,8 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         isVisible={!!tooltipAgent}
         position={tooltipPosition}
         isDarkMode={isDarkMode}
+        likesCount={agentProfiles[tooltipAgent?.toLowerCase()]?.likes_count || 0}
+        tasksCount={agentProfiles[tooltipAgent?.toLowerCase()]?.tasks_completed_count || 0}
       />
     </div>
   )

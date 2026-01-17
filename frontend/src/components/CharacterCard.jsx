@@ -46,6 +46,14 @@ const CharacterCard = ({ agentName, isVisible = false, position = { x: 0, y: 0 }
   const cardRef = useRef(null)
   const [adjustedPosition, setAdjustedPosition] = useState({ x: position.x, y: position.y })
 
+  // Format numbers: if > 1000, show as K (e.g., 1500 -> 1.5K)
+  const formatNumber = (num) => {
+    if (num >= 1000) {
+      return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K'
+    }
+    return num.toString()
+  }
+
   useEffect(() => {
     if (!isVisible || !cardRef.current) return
 
@@ -147,7 +155,7 @@ const CharacterCard = ({ agentName, isVisible = false, position = { x: 0, y: 0 }
             <span className={`text-sm font-normal ${
               isDarkMode ? 'text-gray-300' : 'text-gray-600'
             }`}>
-              {likesCount} likes | {tasksCount} tasks
+              {formatNumber(likesCount)} likes | {formatNumber(tasksCount)} tasks
             </span>
           </div>
           <div className={`text-sm leading-relaxed ${

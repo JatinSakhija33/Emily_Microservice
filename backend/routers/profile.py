@@ -63,7 +63,7 @@ async def get_usage_counts(current_user: User = Depends(get_current_user)):
 async def get_agent_profiles():
     """Get all agent profiles with likes_count and tasks_count"""
     try:
-        response = supabase_client.table('agent_profiles').select('agent_name, likes_count, tasks_count').execute()
+        response = supabase_client.table('agent_profiles').select('agent_name, likes_count, tasks_completed_count').execute()
         
         if not response.data:
             logger.warning("No agent profiles found")
@@ -75,7 +75,7 @@ async def get_agent_profiles():
             agent_name = profile.get('agent_name', '').lower()
             profiles[agent_name] = {
                 'likes_count': profile.get('likes_count', 0) or 0,
-                'tasks_count': profile.get('tasks_count', 0) or 0
+                'tasks_completed_count': profile.get('tasks_completed_count', 0) or 0
             }
         
         return profiles
