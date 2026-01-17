@@ -102,9 +102,9 @@ END;
 $$ language 'plpgsql';
 
 -- Create trigger to automatically update updated_at
-CREATE TRIGGER update_profiles_updated_at
-    BEFORE UPDATE ON profiles
-    FOR EACH ROW
+CREATE TRIGGER update_profiles_updated_at 
+    BEFORE UPDATE ON profiles 
+    FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
 -- OAuth States Table (for CSRF protection during OAuth flows)

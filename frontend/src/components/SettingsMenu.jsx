@@ -297,7 +297,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
     try {
       setLoading(true)
       setSelectedPlatform(platformId)
-
+      
       if (platformId === 'google') {
         console.log('Connecting to Google...')
         await handleGoogleConnect()
@@ -343,10 +343,10 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
         // Handle Google disconnect
         const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://agent-emily.onrender.com'
         const baseUrl = API_BASE_URL.replace(/\/+$/, '')
-        const authToken = localStorage.getItem('authToken') ||
-                          localStorage.getItem('token') ||
+        const authToken = localStorage.getItem('authToken') || 
+                          localStorage.getItem('token') || 
                           localStorage.getItem('access_token')
-
+        
         const response = await fetch(`${baseUrl}/connections/google/disconnect`, {
           method: 'GET',
           headers: {
@@ -354,7 +354,7 @@ const SettingsMenu = ({ isOpen, onClose, isDarkMode = false }) => {
             ...(authToken && { 'Authorization': `Bearer ${authToken}` })
           }
         })
-
+        
         const data = await response.json()
         if (!data.success) {
           throw new Error('Failed to disconnect Google')

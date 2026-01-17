@@ -1252,7 +1252,7 @@ class TemplateEditorAgent:
             
             print(f"🔑 Gemini API key found: {gemini_api_key[:10]}...")
             genai.configure(api_key=gemini_api_key)
-            gemini_model = 'gemini-2.5-flash-image-preview'
+            gemini_model = 'gemini-2.5-flash-image'
             print(f"🤖 Using Gemini model: {gemini_model}")
             
             # Prepare the prompt for Gemini

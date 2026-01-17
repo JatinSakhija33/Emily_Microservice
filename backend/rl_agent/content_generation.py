@@ -61,9 +61,9 @@ class ContentGenerator:
                 genai.configure(api_key=GEMINI_API_KEY)
                 try:
                     # Use the requested model for image generation
-                    self.gemini_client = genai.GenerativeModel('gemini-2.5-flash-image-preview')
+                    self.gemini_client = genai.GenerativeModel('gemini-2.5-flash-image')
                 except Exception as e:
-                    print(f"Warning: Could not initialize gemini-2.5-flash-image-preview ({e}), trying fallback")
+                    print(f"Warning: Could not initialize gemini-2.5-flash-image ({e}), trying fallback")
                     try:
                         self.gemini_client = genai.GenerativeModel('gemini-2.0-flash-exp-image-generation')
                     except Exception:
@@ -192,7 +192,7 @@ class ContentGenerator:
                     contents = image_prompt
 
                 response = self.gemini_client.models.generate_content(
-                    model='gemini-2.5-flash-image-preview',
+                    model='gemini-2.5-flash-image',
                     contents=contents
                 )
 

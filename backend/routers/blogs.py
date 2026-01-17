@@ -494,7 +494,7 @@ async def generate_blog_image(blog_id: str):
         
         # Configure Gemini
         genai.configure(api_key=gemini_api_key)
-        gemini_image_model = 'gemini-2.5-flash-image-preview'
+        gemini_image_model = 'gemini-2.5-flash-image'
         
         # Create image prompt from blog content
         title = blog.get('title', 'Blog Post')

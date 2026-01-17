@@ -182,7 +182,7 @@ class PricingService:
         Supports both fixed pricing (DALL-E) and token-based pricing (Gemini)
         
         Args:
-            model_name: Name of the model (e.g., 'dall-e-3', 'gemini-2.5-flash-image-preview')
+            model_name: Name of the model (e.g., 'dall-e-3', 'gemini-2.5-flash-image')
             image_count: Number of images generated
             size: Optional image size (e.g., '1024x1024', '1024x1792')
             input_tokens: Number of input tokens (for token-based models like Gemini)

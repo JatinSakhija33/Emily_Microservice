@@ -2978,7 +2978,7 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         {/* Chat Messages */}
           <div className="flex flex-col h-full">
             <div className="flex-1 space-y-6">
-              {messages.map((message, index) => (
+            {messages.map((message, index) => (
           <div
             key={message.id}
             className={`group flex gap-3 ${message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
@@ -4371,25 +4371,25 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       {/* Input Area - Always Visible in Chat */}
         <div className="flex-shrink-0 p-4">
-          {/* New Chat Option */}
-          <div className="flex items-center justify-between mb-3">
-            <button
-              onClick={handleReset}
-              className={`flex items-center gap-2 text-sm font-medium transition-colors ${
-                isDarkMode
-                  ? 'text-white hover:text-gray-200'
-                  : 'text-blue-600 hover:text-blue-700'
-              }`}
-            >
-              <span className="text-lg">+</span>
-              <span>New Chat</span>
-            </button>
-            <div className={`text-xs ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-500'
-            }`}>
-              Press Enter to send
+            {/* New Chat Option */}
+            <div className="flex items-center justify-between mb-3">
+              <button
+                onClick={handleReset}
+                className={`flex items-center gap-2 text-sm font-medium transition-colors ${
+                  isDarkMode
+                    ? 'text-white hover:text-gray-200'
+                    : 'text-blue-600 hover:text-blue-700'
+                }`}
+              >
+                <span className="text-lg">+</span>
+                <span>New Chat</span>
+              </button>
+              <div className={`text-xs ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                Press Enter to send
+              </div>
             </div>
-          </div>
 
           <div className="relative">
             <input
@@ -4417,15 +4417,14 @@ const ATSNChatbot = ({ externalConversations = null }) => {
             >
               <Send className="w-5 h-5 transform rotate-45" />
             </button>
-          </div>
-
+        </div>
+        
           <div className={`mt-2 text-xs text-center ${
             isDarkMode ? 'text-gray-400' : 'text-gray-500'
           }`}>
             Try: "Show scheduled posts" • "Create lead" • "View analytics"
           </div>
         </div>
-      )}
 
       {/* ATSN Content Modal */}
       {showContentModal && selectedContentForModal && (

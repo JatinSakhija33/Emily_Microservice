@@ -34,7 +34,7 @@ class ImageEditorService:
             
         self.gemini_client = genai.Client(api_key=self.gemini_api_key)
         self.gemini_model = 'gemini-2.5-flash-lite'
-        self.gemini_image_model = 'gemini-2.5-flash-image-preview'
+        self.gemini_image_model = 'gemini-2.5-flash-image'
         self.token_tracker = TokenUsageService(self.supabase_url, self.supabase_key)
         
     async def add_logo_to_image(self, user_id: str, input_image_url: str, content: str, position: str = "bottom_right") -> Dict[str, Any]:
@@ -384,7 +384,7 @@ MANDATORY: The logo must be placed as a transparent overlay with absolutely no b
                 # Create a mock response object for tracking (Gemini doesn't provide usage)
                 class MockGeminiResponse:
                     def __init__(self):
-                        self.id = getattr(response, 'model_name', 'gemini-2.5-flash-image-preview')
+                        self.id = getattr(response, 'model_name', 'gemini-2.5-flash-image')
                         self.data = [{"url": "gemini_generated"}]
                         self.usage = None
                 
@@ -468,7 +468,7 @@ Generate a high-quality edited image that follows the instructions while maintai
                 # Create a mock response object for tracking (Gemini doesn't provide usage)
                 class MockGeminiResponse:
                     def __init__(self):
-                        self.id = getattr(response, 'model_name', 'gemini-2.5-flash-image-preview')
+                        self.id = getattr(response, 'model_name', 'gemini-2.5-flash-image')
                         self.data = [{"url": "gemini_generated"}]
                         self.usage = None
                 

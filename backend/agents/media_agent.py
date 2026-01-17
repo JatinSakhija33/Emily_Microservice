@@ -61,7 +61,7 @@ class MediaAgent:
         # Initialize Gemini
         self.gemini_client = genai.Client(api_key=gemini_api_key)
         self.gemini_model = 'gemini-2.5-flash-lite'
-        self.gemini_image_model = 'gemini-2.5-flash-image-preview'
+        self.gemini_image_model = 'gemini-2.5-flash-image'
 
         # Initialize token tracker
         self.token_tracker = TokenUsageService(supabase_url, supabase_service_key)

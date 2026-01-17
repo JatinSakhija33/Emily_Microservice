@@ -70,6 +70,10 @@ FIELD_CLARIFICATIONS = {
                 {"label": "Blog Post", "value": "blog"}
             ]
         },
+        "content_description": {
+            "question": "Great! Describe what you want to create. What should the content be about? (Tell me your main idea or topic in a few sentences)",
+            "options": []
+        },
         "media": {
             "question": "Awesome! Should we include some visual elements?",
             "options": [
@@ -540,39 +544,164 @@ async def handle_create_content(state) -> Any:
         content_type = payload.get('content_type', '')
 
         if content_type == 'static_post':
-            # Use RL Agent for content generation with user-provided topic
-            topic = payload.get('content_idea', '')
+            # Use content_description as the primary topic, fallback to content_idea
+            topic = payload.get('content_description') or payload.get('content_idea', '')
             platform = payload.get('platform', 'Instagram').lower()
 
-            logger.info(f"🤖 Using RL Agent to generate content for topic: '{topic}' on {platform}")
+            # Check if user wants to upload their own image
+            if payload.get('media') == 'Upload':
+                logger.info("📤 Handling image upload for static post")
 
-            # Call RL Agent API
-            rl_result = await generate_content_with_rl_agent(
-                profile_id=state.user_id,  # Use the business profile ID
-                topic=topic,
-                platform=platform
-            )
+                # Check if image file is uploaded
+                if not payload.get('media_file'):
+                    # No file uploaded yet, set upload flag
+                    state.waiting_for_upload = True
+                    state.upload_type = 'image'
+                    state.result = "Ready to upload your image for the static post. Please select and upload an image file."
+                    return state
 
-            if rl_result["success"]:
-                # Use RL-generated content
-                content_data['title'] = f"Post about {topic[:50]}"
-                content_data['content'] = rl_result["caption"]
-                content_data['hashtags'] = extract_hashtags_from_caption(rl_result["caption"])
-                content_data['images'] = [rl_result["image_url"]] if rl_result.get("image_url") else []  # Store the RL-generated image as a list
+                # Image is uploaded, process it
+                uploaded_image_url = payload.get('media_file')
+                if uploaded_image_url:
+                    logger.info(f"📤 Processing uploaded image: {uploaded_image_url}")
 
-                # Store RL metadata for learning
-                content_data['rl_post_id'] = rl_result["post_id"]
-                content_data['rl_action_id'] = rl_result["action_id"]
+                    # Step 1: Analyze image with LLM to generate title, caption, and hashtags
+                    logger.info("🔍 Analyzing image with LLM for content generation")
 
-                generated_content = f"{content_data['title']}\n\n{content_data['content']}\n\n{' '.join(content_data['hashtags'])}"
+                    content_description = payload.get('content_description', topic)
+                    image_analysis_prompt = f"""
+                    Analyze this image and create engaging social media content for {platform}.
 
-                logger.info("✅ RL Agent generated content successfully")
+                    Content Description: {content_description}
+                    Business Context: {business_context.get('business_name', 'Business')} - {business_context.get('industry', 'Industry')}
+
+                    Please provide:
+                    1. A compelling title (max 60 characters)
+                    2. An engaging caption that incorporates the content description
+                    3. Relevant hashtags (5-10 hashtags)
+
+                    Make the content optimized for {platform} and aligned with the business context.
+                    """
+
+                    try:
+                        # Use OpenAI GPT-4o-mini with vision for image analysis
+                        analysis_response = openai_client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=[
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "text", "text": image_analysis_prompt},
+                                        {"type": "image_url", "image_url": {"url": uploaded_image_url}}
+                                    ]
+                                }
+                            ],
+                            max_tokens=1000,
+                            temperature=0.7
+                        )
+
+                        analysis_result = analysis_response.choices[0].message.content.strip()
+                        logger.info(f"✅ Image analysis completed: {len(analysis_result)} characters")
+
+                        # Parse the analysis result to extract title, caption, and hashtags
+                        # Simple parsing - assuming the LLM returns structured text
+                        lines = analysis_result.split('\n')
+                        title = ""
+                        caption = ""
+                        hashtags = []
+
+                        for line in lines:
+                            line = line.strip()
+                            if line.startswith('1.') or 'title' in line.lower():
+                                title = line.split(':', 1)[-1].strip().strip('"').strip("'")
+                            elif line.startswith('2.') or 'caption' in line.lower():
+                                caption = line.split(':', 1)[-1].strip()
+                            elif line.startswith('3.') or 'hashtag' in line.lower():
+                                hashtags_text = line.split(':', 1)[-1].strip()
+                                # Extract hashtags from text
+                                import re
+                                hashtags = re.findall(r'#\w+', hashtags_text)
+
+                        content_desc = payload.get('content_description', topic)
+                        if not title:
+                            title = f"Post about {content_desc[:50]}"
+                        if not caption:
+                            caption = f"Check out this amazing content about {content_desc}!"
+                        if not hashtags:
+                            hashtags = ['#content', '#socialmedia']
+
+                        logger.info(f"📝 Generated title: {title}")
+                        logger.info(f"📝 Generated caption: {caption[:100]}...")
+                        logger.info(f"🏷️ Generated hashtags: {hashtags}")
+
+                    except Exception as e:
+                        logger.error(f"❌ Failed to analyze image: {e}")
+                        # Fallback content
+                        content_desc = payload.get('content_description', topic)
+                        title = f"Post about {content_desc[:50]}"
+                        caption = f"Great content about {content_desc}!"
+                        hashtags = ['#content']
+
+                    # Step 2: Enhance image with Gemini for social media optimization
+                    logger.info("🎨 Enhancing image with Gemini for social media optimization")
+
+                    try:
+                        # Note: For proper image enhancement, we would need to:
+                        # 1. Download the image from uploaded_image_url
+                        # 2. Process it with Gemini Vision API
+                        # 3. Upload the enhanced version back to Supabase
+                        # 4. Use the new enhanced image URL
+
+                        # For now, we'll use the uploaded image directly
+                        # TODO: Implement actual image enhancement with Gemini
+                        enhanced_image_url = uploaded_image_url
+                        logger.info("✅ Image enhancement skipped (using original image)")
+
+                    except Exception as e:
+                        logger.error(f"❌ Failed to enhance image: {e}")
+                        enhanced_image_url = uploaded_image_url  # Fallback to original
+
+                    # Step 3: Save to database
+                    content_data['title'] = title
+                    content_data['content'] = caption
+                    content_data['hashtags'] = hashtags
+                    content_data['images'] = [enhanced_image_url]  # Store as list with single image URL
+
+                    generated_content = f"{title}\n\n{caption}\n\n{' '.join(hashtags)}"
+
+                    logger.info("✅ Uploaded image content created successfully")
 
             else:
-                # RL Agent failed - do not fallback, raise error
-                error_msg = f"RL Agent failed to generate content: {rl_result['error']}"
-                logger.error(f"❌ {error_msg}")
-                raise Exception(error_msg)
+                # Use RL Agent for content generation (existing logic)
+                logger.info(f"🤖 Using RL Agent to generate content for topic: '{topic}' on {platform}")
+
+                # Call RL Agent API
+                rl_result = await generate_content_with_rl_agent(
+                    profile_id=state.user_id,  # Use the business profile ID
+                    topic=topic,
+                    platform=platform
+                )
+
+                if rl_result["success"]:
+                    # Use RL-generated content
+                    content_data['title'] = f"Post about {topic[:50]}"
+                    content_data['content'] = rl_result["caption"]
+                    content_data['hashtags'] = extract_hashtags_from_caption(rl_result["caption"])
+                    content_data['images'] = [rl_result["image_url"]] if rl_result.get("image_url") else []  # Store the RL-generated image as a list
+
+                    # Store RL metadata for learning
+                    content_data['rl_post_id'] = rl_result["post_id"]
+                    content_data['rl_action_id'] = rl_result["action_id"]
+
+                    generated_content = f"{content_data['title']}\n\n{content_data['content']}\n\n{' '.join(content_data['hashtags'])}"
+
+                    logger.info("✅ RL Agent generated content successfully")
+
+                else:
+                    # RL Agent failed - do not fallback, raise error
+                    error_msg = f"RL Agent failed to generate content: {rl_result['error']}"
+                    logger.error(f"❌ {error_msg}")
+                    raise Exception(error_msg)
 
         elif content_type == 'carousel':
             # CAROUSEL POST GENERATION
@@ -736,7 +865,7 @@ Make it irresistible to click and watch!"""
                 logger.info(f"🎨 Generating video cover with Gemini for platform: {payload.get('platform')} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
                 logger.info(f"   Logo included: {logo_data is not None}")
 
-                gemini_image_model = 'gemini-2.5-flash-image-preview'
+                gemini_image_model = 'gemini-2.5-flash-image'
 
                 # Prepare contents for Gemini API
                 contents = [cover_prompt]  # Text prompt is always first
@@ -1010,7 +1139,7 @@ Create a high-quality, professional image optimized for Instagram that reflects 
                 logger.info(f"   Using enhanced prompt with {visual_style} style and {aspect_ratio} aspect ratio")
                 logger.info(f"   Logo included: {logo_data is not None}")
 
-                gemini_image_model = 'gemini-2.5-flash-image-preview'
+                gemini_image_model = 'gemini-2.5-flash-image'
 
                 # Prepare contents for Gemini API
                 contents = [image_prompt]  # Text prompt is always first

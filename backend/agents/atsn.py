@@ -525,7 +525,7 @@ async def generate_carousel_images(carousel_plan: dict, business_context: dict, 
 
             # Generate image using Gemini image model
             try:
-                gemini_image_model = 'gemini-2.5-flash-image-preview'
+                gemini_image_model = 'gemini-2.5-flash-image'
                 model = genai.GenerativeModel(gemini_image_model)
 
                 # Prepare generation config
@@ -5829,6 +5829,61 @@ class ATSNAgent:
             self.state.payload['media_file'] = media_urls[0]  # Use first URL
             logger.info(f"Media URLs set in payload: {media_urls}")
 
+        # Special handling: If media was uploaded, override intent classification
+        if (self.state.payload.get('media_file') and
+            user_query.strip() in ['[MEDIA_UPLOAD]', '']):
+            logger.info("Media uploaded detected - overriding intent to create_content")
+            # Set intent to create_content and prepare for confirmation
+            self.state.intent = 'create_content'
+            self.state.payload.update({
+                'channel': 'Social Media',
+                'platform': 'Instagram',  # Default platform
+                'content_type': 'static_post',
+                'content_description': 'Create engaging social media content using my uploaded image',
+                'media': 'Upload',  # Indicate this is uploaded media
+            })
+
+            # Ask for confirmation instead of auto-completing
+            self.state.result = "I see you've uploaded an image! Would you like me to create engaging social media content using this image?"
+            self.state.clarification_question = "I see you've uploaded an image! Would you like me to create engaging social media content using this image?"
+            self.state.clarification_options = [
+                {"label": "Yes, create content", "value": "yes"},
+                {"label": "No, cancel", "value": "no"}
+            ]
+            self.state.waiting_for_user = True
+            self.state.current_step = "waiting_for_confirmation"
+            self.state.payload_complete = False
+
+            # Return formatted response for confirmation
+            clarification_options = []
+            if self.state.waiting_for_user and hasattr(self.state, 'clarification_options'):
+                clarification_options = getattr(self.state, 'clarification_options', [])
+
+            current_step = self.state.current_step
+            if self.state.waiting_for_upload:
+                current_step = "waiting_for_upload"
+
+            return {
+                "intent": self.state.intent,
+                "payload": self.state.payload,
+                "payload_complete": self.state.payload_complete,
+                "waiting_for_user": self.state.waiting_for_user,
+                "waiting_for_upload": self.state.waiting_for_upload,
+                "upload_type": self.state.upload_type,
+                "clarification_question": self.state.clarification_question,
+                "clarification_options": clarification_options,
+                "result": self.state.result,
+                "error": self.state.error,
+                "current_step": current_step,
+                "content_id": self.state.content_id,
+                "content_ids": getattr(self.state, 'content_ids', None),
+                "lead_id": self.state.lead_id,
+                "content_items": self.state.content_items,
+                "lead_items": self.state.lead_items,
+                "needs_connection": getattr(self.state, 'needs_connection', None),
+                "connection_platform": getattr(self.state, 'connection_platform', None)
+            }
+
         # Handle content selection from temp_content_options (for scheduling)
         if (hasattr(self.state, 'temp_content_options') and
             self.state.temp_content_options and
@@ -5855,6 +5910,94 @@ class ATSNAgent:
                     self.state.payload['content_id'] = user_query.strip()
                     logger.info(f"User provided direct content ID: {user_query.strip()}")
                     self.state.temp_content_options = None
+
+        # Handle confirmation response for media upload content creation
+        if (self.state.current_step == "waiting_for_confirmation" and
+            self.state.intent == 'create_content' and
+            self.state.payload.get('media') == 'Upload'):
+
+            user_response = user_query.strip().lower()
+            if user_response in ['yes', 'y', 'sure', 'okay', 'ok', 'go ahead']:
+                logger.info("User confirmed content creation from uploaded media")
+                # Mark payload as complete to proceed with content creation
+                self.state.payload_complete = True
+                self.state.waiting_for_user = False
+                self.state.current_step = "processing"
+                self.state.clarification_question = ""
+                self.state.clarification_options = []
+                self.state.result = "Great! I'm creating engaging content using your uploaded image..."
+            elif user_response in ['no', 'n', 'cancel', 'stop', 'nevermind']:
+                logger.info("User cancelled content creation from uploaded media")
+                # Reset to general state
+                self.state.intent = 'general_talks'
+                self.state.payload_complete = False
+                self.state.waiting_for_user = False
+                self.state.current_step = "end"
+                self.state.clarification_question = ""
+                self.state.clarification_options = []
+                self.state.result = "No problem! Your uploaded image is saved. Let me know if you'd like to do something else with it."
+                # Return formatted response for invalid response
+                clarification_options = []
+                if self.state.waiting_for_user and hasattr(self.state, 'clarification_options'):
+                    clarification_options = getattr(self.state, 'clarification_options', [])
+
+                current_step = self.state.current_step
+                if self.state.waiting_for_upload:
+                    current_step = "waiting_for_upload"
+
+                return {
+                    "intent": self.state.intent,
+                    "payload": self.state.payload,
+                    "payload_complete": self.state.payload_complete,
+                    "waiting_for_user": self.state.waiting_for_user,
+                    "waiting_for_upload": self.state.waiting_for_upload,
+                    "upload_type": self.state.upload_type,
+                    "clarification_question": self.state.clarification_question,
+                    "clarification_options": clarification_options,
+                    "result": self.state.result,
+                    "error": self.state.error,
+                    "current_step": current_step,
+                    "content_id": self.state.content_id,
+                    "content_ids": getattr(self.state, 'content_ids', None),
+                    "lead_id": self.state.lead_id,
+                    "content_items": self.state.content_items,
+                    "lead_items": self.state.lead_items,
+                    "needs_connection": getattr(self.state, 'needs_connection', None),
+                    "connection_platform": getattr(self.state, 'connection_platform', None)
+                }
+            else:
+                # Invalid response, ask again
+                logger.info("Invalid confirmation response, asking again")
+                self.state.result = "Please respond with 'yes' to create content or 'no' to cancel."
+                # Return formatted response for invalid response
+                clarification_options = []
+                if self.state.waiting_for_user and hasattr(self.state, 'clarification_options'):
+                    clarification_options = getattr(self.state, 'clarification_options', [])
+
+                current_step = self.state.current_step
+                if self.state.waiting_for_upload:
+                    current_step = "waiting_for_upload"
+
+                return {
+                    "intent": self.state.intent,
+                    "payload": self.state.payload,
+                    "payload_complete": self.state.payload_complete,
+                    "waiting_for_user": self.state.waiting_for_user,
+                    "waiting_for_upload": self.state.waiting_for_upload,
+                    "upload_type": self.state.upload_type,
+                    "clarification_question": self.state.clarification_question,
+                    "clarification_options": clarification_options,
+                    "result": self.state.result,
+                    "error": self.state.error,
+                    "current_step": current_step,
+                    "content_id": self.state.content_id,
+                    "content_ids": getattr(self.state, 'content_ids', None),
+                    "lead_id": self.state.lead_id,
+                    "content_items": self.state.content_items,
+                    "lead_items": self.state.lead_items,
+                    "needs_connection": getattr(self.state, 'needs_connection', None),
+                    "connection_platform": getattr(self.state, 'connection_platform', None)
+                }
 
         # Run the graph
         result = await self.graph.ainvoke(self.state)

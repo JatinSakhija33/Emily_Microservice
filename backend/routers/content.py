@@ -1309,7 +1309,7 @@ async def generate_all_carousel_images_for_post(
             "carousel_images": generated_images,
             "image_url": generated_images[0] if generated_images else None,  # Return first image for compatibility
             "generation_time": total_generation_time,
-            "generation_model": "gemini-2.5-flash-image-preview",
+            "generation_model": "gemini-2.5-flash-image",
             "generation_service": "google_gemini"
         }
         

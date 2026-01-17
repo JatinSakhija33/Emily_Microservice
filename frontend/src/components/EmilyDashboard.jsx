@@ -794,7 +794,7 @@ function EmilyDashboard() {
                               }`}>
                                 : Suggested content for today
                               </span>
-                            </div>
+                    </div>
                             {todayCalendarEntries.length > 0 && (
                               <div className="mt-2 space-y-1">
                                 {todayCalendarEntries.slice(0, 3).map((entry, idx) => (
@@ -821,9 +821,9 @@ function EmilyDashboard() {
                                     isDarkMode ? 'text-gray-400' : 'text-gray-500'
                                   }`}>
                                     +{todayCalendarEntries.length - 3} more
-                                  </div>
-                                )}
-                              </div>
+                  </div>
+                )}
+          </div>
                             )}
                           </div>
                         </div>

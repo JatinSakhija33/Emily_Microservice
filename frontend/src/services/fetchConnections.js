@@ -120,7 +120,7 @@ export const fetchAllConnections = async (useCache = true) => {
     if (existingGoogleConnection) {
       googleConnections = [existingGoogleConnection]
     }
-
+    
     // Fetch WhatsApp connection status
     let whatsappConnections = []
     try {
