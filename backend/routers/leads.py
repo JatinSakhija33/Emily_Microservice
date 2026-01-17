@@ -668,7 +668,7 @@ async def create_lead(
             "email": request.email,
             "phone_number": request.phone_number,
             "source_platform": request.source_platform,
-            "status": request.status,
+            "status": request.status.lower() if request.status else "new",  # Convert to lowercase for consistency
             "form_data": request.form_data or {},
             "metadata": {
                 **(request.metadata or {}),
@@ -949,7 +949,7 @@ async def import_leads_csv(
                 email = row.get('email', '').strip() or None
                 phone_number = row.get('phone_number', '').strip() or row.get('phone', '').strip() or None
                 source_platform = row.get('source_platform', 'manual').strip() or 'manual'
-                status = row.get('status', 'new').strip() or 'new'
+                status = (row.get('status', 'new').strip() or 'new').lower()  # Convert to lowercase for consistency
                 follow_up_at = row.get('follow_up_at', '').strip() or None
                 
                 # Validate and parse follow_up_at - MANDATORY field
@@ -1304,18 +1304,83 @@ Return a JSON object with:
                                             )
                                         
                                         try:
-                                            email_data = json.loads(response.choices[0].message.content)
+                                            # Clean the AI response first - remove markdown code blocks
+                                            raw_content = response.choices[0].message.content.strip()
+                                            # Remove markdown code blocks if present
+                                            if raw_content.startswith('```json'):
+                                                raw_content = raw_content[7:]  # Remove ```json
+                                            if raw_content.startswith('```'):
+                                                raw_content = raw_content[3:]  # Remove ```
+                                            if raw_content.endswith('```'):
+                                                raw_content = raw_content[:-3]  # Remove trailing ```
+                                            raw_content = raw_content.strip()
+
+                                            email_data = json.loads(raw_content)
                                             email_subject = email_data.get("subject", f"Thank you for contacting {business_name}")
                                             email_body = email_data.get("body", f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>")
-                                            email_subject = str(email_subject or f"Thank you for contacting {business_name}")
-                                            email_body = str(email_body or f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>")
-                                        except json.JSONDecodeError:
+
+                                            # Validate and clean the email body
+                                            email_subject = str(email_subject or f"Thank you for contacting {business_name}").strip()
+                                            email_body = str(email_body or f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>").strip()
+
+                                            # Additional validation: ensure email body doesn't contain raw JSON
+                                            body_stripped = email_body.strip()
+                                            if body_stripped.startswith('{') and body_stripped.endswith('}'):
+                                                try:
+                                                    # Try to parse as JSON - if successful, it's raw JSON and invalid
+                                                    json.loads(body_stripped)
+                                                    logger.warning(f"Email body contains raw JSON structure for lead {lead_id}, using fallback")
+                                                    email_body = f"<p>Dear {lead_name},</p><p>Thank you for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
+                                                except json.JSONDecodeError:
+                                                    # If it looks like JSON but isn't valid JSON, still check for JSON-like content
+                                                    if ('"body"' in body_stripped or '"subject"' in body_stripped or
+                                                        "'body'" in body_stripped or "'subject'" in body_stripped):
+                                                        logger.warning(f"Email body appears to contain JSON-like structure for lead {lead_id}, using fallback")
+                                                        email_body = f"<p>Dear {lead_name},</p><p>Thank you for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
+
+                                        except json.JSONDecodeError as json_error:
+                                            logger.warning(f"JSON parsing failed for lead {lead_id}: {json_error}")
                                             content = response.choices[0].message.content or ""
-                                            email_subject = email_subject or f"Thank you for contacting {business_name}"
-                                            email_body = content or f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
-                                            # Fallback: replace any placeholders that might exist
-                                            email_body = str(email_body).replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
-                                            email_subject = str(email_subject).replace("{lead_name}", lead_name).replace("{{lead_name}}", lead_name)
+
+                                            # Clean content - remove markdown and JSON if present
+                                            content = content.strip()
+                                            if content.startswith('```'):
+                                                # Remove markdown code blocks
+                                                lines = content.split('\n')
+                                                # Find the actual content between code blocks
+                                                start_idx = -1
+                                                end_idx = -1
+                                                for i, line in enumerate(lines):
+                                                    if line.strip().startswith('```'):
+                                                        if start_idx == -1:
+                                                            start_idx = i
+                                                        else:
+                                                            end_idx = i
+                                                            break
+                                                if start_idx != -1 and end_idx != -1:
+                                                    content = '\n'.join(lines[start_idx + 1:end_idx])
+                                                elif content.startswith('```'):
+                                                    content = content[3:]
+                                                    if content.endswith('```'):
+                                                        content = content[:-3]
+
+                                            content = content.strip()
+
+                                            # Check if content is still JSON and extract body if possible
+                                            try:
+                                                if content.startswith('{') and '"body"' in content:
+                                                    json_content = json.loads(content)
+                                                    content = json_content.get('body', content)
+                                            except:
+                                                pass  # Keep original content if JSON parsing fails
+
+                                            email_subject = f"Thank you for contacting {business_name}"
+                                            email_body = content if content else f"<p>Thank you {lead_name} for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
+
+                                            # Final validation: ensure we don't have raw JSON in email body
+                                            if email_body.startswith('{') and ('"body"' in email_body or '"subject"' in email_body):
+                                                logger.warning(f"Content still appears to be JSON for lead {lead_id}, using fallback")
+                                                email_body = f"<p>Dear {lead_name},</p><p>Thank you for contacting {business_name}!</p><p>We appreciate your interest and look forward to connecting with you.</p>"
                                     except Exception as email_gen_error:
                                         logger.error(f"Error generating email for lead {lead_id}: {email_gen_error}")
                                         # Fallback email
@@ -1405,16 +1470,29 @@ Return a JSON object with:
         logger.error(f"Error importing CSV: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to import CSV: {str(e)}")
 
-@router.get("", response_model=List[LeadResponse])
+@router.get("")
 async def get_leads(
     status: Optional[str] = Query(None),
     source_platform: Optional[str] = Query(None),
-    limit: int = Query(50, le=100),
+    limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
     current_user: dict = Depends(get_current_user)
 ):
-    """Get all leads for current user"""
+    """Get all leads for current user with pagination"""
     try:
+        # Build base query for counting
+        count_query = supabase_admin.table("leads").select("*", count="exact").eq("user_id", current_user["id"])
+        
+        if status:
+            count_query = count_query.eq("status", status)
+        if source_platform:
+            count_query = count_query.eq("source_platform", source_platform)
+        
+        # Get total count
+        count_result = count_query.execute()
+        total_count = count_result.count if hasattr(count_result, 'count') else 0
+        
+        # Build query for fetching leads
         query = supabase_admin.table("leads").select("*").eq("user_id", current_user["id"])
         
         if status:
@@ -1451,7 +1529,14 @@ async def get_leads(
             for lead in leads:
                 lead["last_remark"] = last_remarks.get(lead["id"])
         
-        return leads
+        # Return paginated response
+        return {
+            "leads": leads,
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+            "has_more": (offset + limit) < total_count
+        }
         
     except Exception as e:
         logger.error(f"Error getting leads: {e}")
@@ -1563,22 +1648,23 @@ async def update_lead_status(
         if not lead.data:
             raise HTTPException(status_code=404, detail="Lead not found")
         
-        # Update status
+        # Update status (normalize to lowercase)
+        normalized_status = request.status.lower() if request.status else lead.data[0]["status"]
         supabase_admin.table("leads").update({
-            "status": request.status,
+            "status": normalized_status,
             "updated_at": datetime.now().isoformat()
         }).eq("id", lead_id).execute()
-        
+
         # Create status history entry
         supabase_admin.table("lead_status_history").insert({
             "lead_id": lead_id,
             "old_status": lead.data[0]["status"],
-            "new_status": request.status,
+            "new_status": normalized_status,
             "changed_by": "user",
             "reason": request.remarks  # Store remarks as reason in history
         }).execute()
         
-        return {"success": True, "status": request.status}
+        return {"success": True, "status": normalized_status}
         
     except HTTPException:
         raise
@@ -2230,14 +2316,83 @@ Return a JSON object with:
             )
         
         try:
-            email_data = json.loads(response.choices[0].message.content)
+            # Clean the AI response first - remove markdown code blocks
+            raw_content = response.choices[0].message.content.strip()
+            # Remove markdown code blocks if present
+            if raw_content.startswith('```json'):
+                raw_content = raw_content[7:]  # Remove ```json
+            if raw_content.startswith('```'):
+                raw_content = raw_content[3:]  # Remove ```
+            if raw_content.endswith('```'):
+                raw_content = raw_content[:-3]  # Remove trailing ```
+            raw_content = raw_content.strip()
+
+            email_data = json.loads(raw_content)
             subject = email_data.get("subject", f"Thank you for your interest in {business_name}")
             body = email_data.get("body", f"Thank you {lead_name} for your interest!")
-        except json.JSONDecodeError:
-            # Fallback if JSON parsing fails
-            content = response.choices[0].message.content
+
+            # Validate and clean the email body
+            subject = str(subject or f"Thank you for your interest in {business_name}").strip()
+            body = str(body or f"Thank you {lead_name} for your interest!").strip()
+
+            # Additional validation: ensure email body doesn't contain raw JSON
+            body_stripped = body.strip()
+            if body_stripped.startswith('{') and body_stripped.endswith('}'):
+                try:
+                    # Try to parse as JSON - if successful, it's raw JSON and invalid
+                    json.loads(body_stripped)
+                    logger.warning(f"Email body contains raw JSON structure, using fallback")
+                    body = f"<p>Dear {lead_name},</p><p>Thank you for your interest in {business_name}!</p><p>We look forward to connecting with you.</p>"
+                except json.JSONDecodeError:
+                    # If it looks like JSON but isn't valid JSON, still check for JSON-like content
+                    if ('"body"' in body_stripped or '"subject"' in body_stripped or
+                        "'body'" in body_stripped or "'subject'" in body_stripped):
+                        logger.warning(f"Email body appears to contain JSON-like structure, using fallback")
+                        body = f"<p>Dear {lead_name},</p><p>Thank you for your interest in {business_name}!</p><p>We look forward to connecting with you.</p>"
+
+        except json.JSONDecodeError as json_error:
+            logger.warning(f"JSON parsing failed: {json_error}")
+            content = response.choices[0].message.content or ""
+
+            # Clean content - remove markdown and JSON if present
+            content = content.strip()
+            if content.startswith('```'):
+                # Remove markdown code blocks
+                lines = content.split('\n')
+                # Find the actual content between code blocks
+                start_idx = -1
+                end_idx = -1
+                for i, line in enumerate(lines):
+                    if line.strip().startswith('```'):
+                        if start_idx == -1:
+                            start_idx = i
+                        else:
+                            end_idx = i
+                            break
+                if start_idx != -1 and end_idx != -1:
+                    content = '\n'.join(lines[start_idx + 1:end_idx])
+                elif content.startswith('```'):
+                    content = content[3:]
+                    if content.endswith('```'):
+                        content = content[:-3]
+
+            content = content.strip()
+
+            # Check if content is still JSON and extract body if possible
+            try:
+                if content.startswith('{') and '"body"' in content:
+                    json_content = json.loads(content)
+                    content = json_content.get('body', content)
+            except:
+                pass  # Keep original content if JSON parsing fails
+
             subject = f"Thank you for your interest in {business_name}"
-            body = content
+            body = content if content else f"Thank you {lead_name} for your interest!"
+
+            # Final validation: ensure we don't have raw JSON in email body
+            if body.startswith('{') and ('"body"' in body or '"subject"' in body):
+                logger.warning(f"Content still appears to be JSON, using fallback")
+                body = f"<p>Dear {lead_name},</p><p>Thank you for your interest in {business_name}!</p><p>We look forward to connecting with you.</p>"
         
         return {
             "success": True,

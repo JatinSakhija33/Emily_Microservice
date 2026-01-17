@@ -251,11 +251,28 @@ function EmilyDashboard() {
 
       while (true) {
         const response = await leadsAPI.getLeads({ limit, offset })
-        const leads = response.data || []
+        
+        // Handle both old format (array) and new format (object with leads array)
+        let leads = []
+        let hasMore = false
+        
+        if (Array.isArray(response.data)) {
+          // Old format - backward compatibility
+          leads = response.data
+          hasMore = leads.length === limit
+        } else if (response.data && response.data.leads) {
+          // New format with pagination metadata
+          leads = response.data.leads || []
+          hasMore = response.data.has_more !== undefined ? response.data.has_more : leads.length === limit
+        }
 
         if (leads.length === 0) break // No more leads
 
         allLeads = [...allLeads, ...leads]
+        
+        // Use has_more flag if available, otherwise check if we got a full page
+        if (!hasMore) break
+        
         offset += limit
 
         // Safety check to prevent infinite loops

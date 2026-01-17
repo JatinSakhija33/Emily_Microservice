@@ -136,12 +136,24 @@ const LeadsDashboard = () => {
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedLeadIds, setSelectedLeadIds] = useState(new Set())
   const [deletingBulk, setDeletingBulk] = useState(false)
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
   const leadsRef = useRef([])
   const lastFetchTimeRef = useRef(null)
 
-  const fetchLeads = useCallback(async (showLoading = true) => {
+  // Infinite scroll state
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadedCount, setLoadedCount] = useState(0)
+  const [total, setTotal] = useState(0)
+  const pageSize = 50 // Load 50 leads at a time
+
+  // Ref for intersection observer
+  const loadMoreRef = useRef(null)
+
+  const fetchLeads = useCallback(async (showLoading = true, append = false) => {
     try {
       if (showLoading) setLoading(true)
+      if (append) setLoadingMore(true)
 
       const params = {}
       if (filterStatus !== 'all') {
@@ -150,37 +162,74 @@ const LeadsDashboard = () => {
       if (filterPlatform !== 'all') {
         params.source_platform = filterPlatform
       }
-      params.limit = 100
-      params.offset = 0
+      params.limit = pageSize
+      params.offset = append ? loadedCount : 0
 
       const response = await leadsAPI.getLeads(params)
-      const fetchedLeads = response.data || []
 
-      // Check for new leads using refs to avoid dependency issues
-      const previousLeads = leadsRef.current
-      const previousFetchTime = lastFetchTimeRef.current
+      // Handle both old format (array) and new format (object with leads array)
+      let fetchedLeads = []
+      let totalCount = 0
+      let hasMoreData = false
 
-      if (previousFetchTime && previousLeads.length > 0) {
-        const newLeads = fetchedLeads.filter(newLead => {
-          const newLeadTime = new Date(newLead.created_at)
-          return newLeadTime > previousFetchTime && !previousLeads.find(l => l.id === newLead.id)
-        })
+      if (Array.isArray(response.data)) {
+        // Old format - backward compatibility (just an array of leads)
+        fetchedLeads = response.data
+        totalCount = fetchedLeads.length
+        hasMoreData = fetchedLeads.length === pageSize
+      } else if (response.data && response.data.leads) {
+        // New format with pagination metadata
+        fetchedLeads = response.data.leads || []
+        totalCount = response.data.total || fetchedLeads.length
+        hasMoreData = response.data.has_more !== undefined ? response.data.has_more : fetchedLeads.length === pageSize
+      } else {
+        fetchedLeads = []
+        totalCount = 0
+        hasMoreData = false
+      }
 
-        if (newLeads.length > 0) {
-          showInfo(
-            'New Lead!',
-            `${newLeads.length} new lead${newLeads.length > 1 ? 's' : ''} received`,
-            {
-              type: 'lead',
-              leadIds: newLeads.map(l => l.id)
-            }
-          )
+      // Check for new leads using refs to avoid dependency issues (only on first load)
+      if (!append && loadedCount === 0) {
+        const previousLeads = leadsRef.current
+        const previousFetchTime = lastFetchTimeRef.current
+
+        if (previousFetchTime && previousLeads.length > 0) {
+          const newLeads = fetchedLeads.filter(newLead => {
+            const newLeadTime = new Date(newLead.created_at)
+            return newLeadTime > previousFetchTime && !previousLeads.find(l => l.id === newLead.id)
+          })
+
+          if (newLeads.length > 0) {
+            showInfo(
+              'New Lead!',
+              `${newLeads.length} new lead${newLeads.length > 1 ? 's' : ''} received`,
+              {
+                type: 'lead',
+                leadIds: newLeads.map(l => l.id)
+              }
+            )
+          }
         }
       }
 
       // Update state and refs
-      setLeads(fetchedLeads)
-      leadsRef.current = fetchedLeads
+      if (append) {
+        setLeads(prev => [...prev, ...fetchedLeads])
+        setLoadedCount(prev => prev + fetchedLeads.length)
+      } else {
+        setLeads(fetchedLeads)
+        setLoadedCount(fetchedLeads.length)
+      }
+
+      setTotal(totalCount)
+      // Use backend's has_more flag if available, otherwise check if we got a full page
+      const shouldHaveMore = hasMoreData && fetchedLeads.length >= pageSize
+      setHasMore(shouldHaveMore)
+
+      console.log(`FetchLeads: append=${append}, fetched=${fetchedLeads.length}, total=${totalCount}, hasMoreData=${hasMoreData}, shouldHaveMore=${shouldHaveMore}`)
+
+      leadsRef.current = append ? [...leadsRef.current, ...fetchedLeads] : fetchedLeads
+
       const now = new Date()
       setLastFetchTime(now)
       lastFetchTimeRef.current = now
@@ -190,8 +239,9 @@ const LeadsDashboard = () => {
       showError('Error', 'Failed to fetch leads. Please try again.')
     } finally {
       if (showLoading) setLoading(false)
+      if (append) setLoadingMore(false)
     }
-  }, [filterStatus, filterPlatform, showError, showInfo])
+  }, [filterStatus, filterPlatform, loadedCount, pageSize, showError, showInfo])
 
   // Clear leads data on logout
   useEffect(() => {
@@ -202,6 +252,9 @@ const LeadsDashboard = () => {
       setShowDetailModal(false)
       setSelectedLeadIds(new Set())
       setSelectionMode(false)
+      setLoadedCount(0)
+      setHasMore(true)
+      setLoadingMore(false)
     }
   }, [user])
 
@@ -226,12 +279,49 @@ const LeadsDashboard = () => {
     }
   }, [])
 
+  // Reset loaded count when filters change
+  useEffect(() => {
+    if (user) {
+      setLoadedCount(0)
+      setHasMore(true)
+    }
+  }, [user, filterStatus, filterPlatform])
+
   // Initial fetch and refetch when filters change
   useEffect(() => {
     if (user) {
       fetchLeads()
     }
-  }, [user, filterStatus, filterPlatform, fetchLeads])
+  }, [user, filterStatus, filterPlatform]) // Removed fetchLeads from dependencies
+
+  // Intersection observer for infinite scrolling
+  useEffect(() => {
+    let isLoading = false // Prevent multiple simultaneous loads
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading && loadedCount > 0 && !isLoading) {
+          console.log('IntersectionObserver: Loading more leads...')
+          isLoading = true
+          fetchLeads(false, true).finally(() => {
+            isLoading = false
+          })
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    )
+
+    const currentRef = loadMoreRef.current
+    if (currentRef) {
+      observer.observe(currentRef)
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef)
+      }
+    }
+  }, [hasMore, loadingMore, loading, loadedCount]) // Removed fetchLeads, added loadedCount
 
   // Handle leadId from URL query parameter (for opening lead from chatbot link)
   useEffect(() => {
@@ -344,15 +434,6 @@ const LeadsDashboard = () => {
   }
 
   const handleBulkDelete = async () => {
-    if (selectedLeadIds.size === 0) {
-      showError('Error', 'No leads selected')
-      return
-    }
-
-    if (!window.confirm(`Are you sure you want to delete ${selectedLeadIds.size} lead(s)? This action cannot be undone.`)) {
-      return
-    }
-
     try {
       setDeletingBulk(true)
       const leadIdsArray = Array.from(selectedLeadIds)
@@ -361,7 +442,7 @@ const LeadsDashboard = () => {
       if (result.data.success) {
         showSuccess(
           'Leads Deleted',
-          `Successfully deleted ${result.data.success_count} lead(s)${result.data.failed_count > 0 ? `. ${result.data.failed_count} failed.` : ''}`
+          `${result.data.deleted_count} lead${result.data.deleted_count > 1 ? 's' : ''} deleted successfully${result.data.failed_count > 0 ? ` (${result.data.failed_count} failed)` : ''}`
         )
         // Refresh leads list
         await fetchLeads(false)
@@ -379,6 +460,7 @@ const LeadsDashboard = () => {
       showError('Error', 'Failed to delete leads')
     } finally {
       setDeletingBulk(false)
+      setShowBulkDeleteConfirm(false)
     }
   }
 
@@ -902,18 +984,40 @@ const LeadsDashboard = () => {
               <div className="flex items-center space-x-2 flex-shrink-0">
                 {selectionMode && (
                   <>
+                    {/* Selection Count */}
+                    <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
+                      isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-sm font-medium">
+                        {selectedLeadIds.size} selected
+                      </span>
+                    </div>
+
+                    {/* Select All/Deselect All */}
                     <button
                       onClick={handleSelectAll}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 ${
+                        isDarkMode
+                          ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                      }`}
                     >
                       <CheckCircle className="w-4 h-4" />
-                      <span>{selectedLeadIds.size === filteredLeads.length ? 'Deselect All' : 'Select All'}</span>
+                      <span className="text-sm font-medium">
+                        {selectedLeadIds.size === filteredLeads.length ? 'Deselect All' : 'Select All'}
+                      </span>
                     </button>
+
+                    {/* Bulk Delete - Only show when items are selected */}
                     {selectedLeadIds.size > 0 && (
                       <button
-                        onClick={handleBulkDelete}
-                        disabled={deletingBulk}
-                        className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 disabled:opacity-50 shadow-lg hover:shadow-xl"
+                        onClick={() => setShowBulkDeleteConfirm(true)}
+                        className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-medium ${
+                          deletingBulk
+                            ? 'opacity-50 cursor-not-allowed bg-gray-400 text-white'
+                            : 'bg-red-500 hover:bg-red-600 text-white shadow-lg hover:shadow-xl'
+                        }`}
                       >
                         {deletingBulk ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -923,21 +1027,37 @@ const LeadsDashboard = () => {
                         <span>Delete ({selectedLeadIds.size})</span>
                       </button>
                     )}
+
+                    {/* Cancel Selection */}
                     <button
                       onClick={handleToggleSelectionMode}
-                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl ${
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 ${
                         isDarkMode
-                          ? 'bg-gray-600 text-gray-200 hover:bg-gray-500'
-                          : 'bg-gray-500 text-white hover:bg-gray-600'
+                          ? 'bg-gray-600 text-gray-200 hover:bg-gray-500 border border-gray-600'
+                          : 'bg-gray-500 text-white hover:bg-gray-600 border border-gray-400'
                       }`}
                     >
                       <X className="w-4 h-4" />
-                      <span>Cancel</span>
+                      <span className="text-sm font-medium">Cancel</span>
                     </button>
                   </>
                 )}
                 {!selectionMode && (
                   <>
+                    {/* Bulk Selection Toggle */}
+                    <button
+                      onClick={handleToggleSelectionMode}
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg border ${
+                        isDarkMode
+                          ? 'bg-blue-600 text-white hover:bg-blue-700 border-blue-500'
+                          : 'bg-blue-500 text-white hover:bg-blue-600 border-blue-400'
+                      }`}
+                      title="Select multiple leads for bulk actions"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-sm font-medium">Select</span>
+                    </button>
+
                     <button
                       onClick={() => setShowAddModal(true)}
                       className={`p-2 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg border ${
@@ -970,6 +1090,7 @@ const LeadsDashboard = () => {
 
         {/* Leads Board - Column Layout by Status */}
         <div className="flex-1 px-4 lg:px-6 py-6 overflow-x-hidden">
+
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <p className={`text-lg ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Loading leads...</p>
@@ -1051,6 +1172,42 @@ const LeadsDashboard = () => {
         </div>
       </div>
 
+      {/* Infinite scroll loading indicator */}
+      {loadingMore && (
+        <div className="flex items-center justify-center py-6">
+          <div className={`flex items-center space-x-2 text-sm ${
+            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+          }`}>
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+            <span>Loading more leads...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Infinite scroll trigger element */}
+      {hasMore && !loadingMore && loadedCount > 0 && (
+        <div
+          ref={loadMoreRef}
+          className="h-10 flex items-center justify-center"
+        >
+          <div className={`text-xs ${
+            isDarkMode ? 'text-gray-500' : 'text-gray-400'
+          }`}>
+            Scroll for more leads ({loadedCount} of {total})
+          </div>
+        </div>
+      )}
+
+      {/* End of list indicator */}
+      {!hasMore && loadedCount > 0 && (
+        <div className={`text-center py-6 text-sm ${
+          isDarkMode ? 'text-gray-400' : 'text-gray-600'
+        }`}>
+          You've reached the end - {loadedCount} of {total} leads loaded
+        </div>
+      )}
+
+
       {/* Lead Detail Modal */}
       {showDetailModal && selectedLead && (
         <LeadDetailModal
@@ -1079,6 +1236,117 @@ const LeadsDashboard = () => {
         isImporting={importingCSV}
         isDarkMode={isDarkMode}
       />
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 py-4 text-center">
+            {/* Background overlay */}
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              onClick={() => setShowBulkDeleteConfirm(false)}
+            ></div>
+
+            {/* Modal panel */}
+            <div className={`inline-block w-full max-w-lg rounded-lg text-left overflow-hidden shadow-xl transform transition-all ${
+              isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white'
+            }`}>
+              <div className="px-6 py-4">
+                {/* Header */}
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                      <AlertCircle className="w-6 h-6 text-red-600" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className={`text-lg font-semibold ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>
+                      Delete Selected Leads
+                    </h3>
+                    <p className={`text-sm ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>
+                      This action cannot be undone
+                    </p>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className={`mb-6 p-4 rounded-lg ${
+                  isDarkMode ? 'bg-red-900/20 border border-red-800' : 'bg-red-50 border border-red-200'
+                }`}>
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0">
+                      <XCircle className="w-5 h-5 text-red-500 mt-0.5" />
+                    </div>
+                    <div>
+                      <p className={`text-sm font-medium ${
+                        isDarkMode ? 'text-red-300' : 'text-red-800'
+                      }`}>
+                        You are about to delete {selectedLeadIds.size} lead{selectedLeadIds.size > 1 ? 's' : ''}
+                      </p>
+                      <div className={`mt-2 text-sm ${
+                        isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>
+                        <p>This will permanently remove:</p>
+                        <ul className="mt-1 ml-4 list-disc list-inside space-y-1">
+                          <li>{selectedLeadIds.size} lead record{selectedLeadIds.size > 1 ? 's' : ''}</li>
+                          <li>All associated status history</li>
+                          <li>All follow-up reminders and schedules</li>
+                          <li>Contact information and notes</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Warning */}
+                <div className={`flex items-start space-x-2 p-3 rounded-lg ${
+                  isDarkMode ? 'bg-yellow-900/20 border border-yellow-800' : 'bg-yellow-50 border border-yellow-200'
+                }`}>
+                  <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                  <p className={`text-sm ${
+                    isDarkMode ? 'text-yellow-300' : 'text-yellow-800'
+                  }`}>
+                    <strong>Warning:</strong> This action cannot be undone. Make sure you have selected the correct leads.
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className={`px-6 py-4 flex justify-end space-x-3 ${
+                isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
+              }`}>
+                <button
+                  onClick={() => setShowBulkDeleteConfirm(false)}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    isDarkMode
+                      ? 'text-gray-300 hover:text-white hover:bg-gray-600'
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                  disabled={deletingBulk}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={deletingBulk}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center space-x-2 ${
+                    deletingBulk
+                      ? 'opacity-50 cursor-not-allowed bg-gray-400 text-white'
+                      : 'bg-red-500 hover:bg-red-600 text-white shadow-lg hover:shadow-xl'
+                  }`}
+                >
+                  {deletingBulk && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{deletingBulk ? 'Deleting...' : 'Delete Leads'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
