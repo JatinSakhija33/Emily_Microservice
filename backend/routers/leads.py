@@ -1474,7 +1474,7 @@ Return a JSON object with:
 async def get_leads(
     status: Optional[str] = Query(None),
     source_platform: Optional[str] = Query(None),
-    limit: int = Query(50, le=200),
+    limit: int = Query(50, le=500),
     offset: int = Query(0, ge=0),
     current_user: dict = Depends(get_current_user)
 ):

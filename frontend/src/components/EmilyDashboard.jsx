@@ -48,7 +48,9 @@ import MainContentLoader from './MainContentLoader'
 import ATSNChatbot from './ATSNChatbot'
 import RecentTasks from './RecentTasks'
 import ContentCard from './ContentCard'
-import { Sparkles, TrendingUp, Target, BarChart3, FileText, PanelRight, PanelLeft, X, ChevronRight, RefreshCw } from 'lucide-react'
+import AgentCards from './AgentCards'
+import NewPostModal from './NewPostModal'
+import { Sparkles, TrendingUp, Target, BarChart3, FileText, PanelRight, PanelLeft, X, ChevronRight, RefreshCw, Send } from 'lucide-react'
 
 // Voice Orb Component with animated border (spring-like animation)
 const VoiceOrb = ({ isSpeaking }) => {
@@ -189,6 +191,14 @@ function EmilyDashboard() {
   const [overdueLeadsLoading, setOverdueLeadsLoading] = useState(true)
   const [todayCalendarEntries, setTodayCalendarEntries] = useState([])
   const [calendarEntriesLoading, setCalendarEntriesLoading] = useState(true)
+  const [upcomingCalendarCount, setUpcomingCalendarCount] = useState(0)
+  const [upcomingCalendarLoading, setUpcomingCalendarLoading] = useState(true)
+  const [scheduledPostsCount, setScheduledPostsCount] = useState(0)
+  const [scheduledPostsLoading, setScheduledPostsLoading] = useState(true)
+  const [todaysNewLeadsCount, setTodaysNewLeadsCount] = useState(0)
+  const [todaysNewLeadsLoading, setTodaysNewLeadsLoading] = useState(true)
+  const [showChatbot, setShowChatbot] = useState(false)
+  const [showNewPostModal, setShowNewPostModal] = useState(false)
 
   // Today's conversations only (no historical data)
 
@@ -216,24 +226,96 @@ function EmilyDashboard() {
     showSuccess('Chat refreshed', 'The conversation has been reset to start fresh.')
   }
 
+  const handleRefreshAllData = async () => {
+    try {
+      // Clear all caches
+      const cacheKeys = [
+        `overdue_leads_count_${user?.id}`,
+        `today_calendar_entries_${user?.id}`,
+        `upcoming_calendar_count_${user?.id}`,
+        `scheduled_posts_count_${user?.id}`,
+        `todays_new_leads_count_${user?.id}`
+      ]
+
+      cacheKeys.forEach(key => {
+        localStorage.removeItem(key)
+      })
+
+      // Refetch all data
+      if (user) {
+        await Promise.all([
+          fetchOverdueLeadsCount(true),
+          fetchTodayCalendarEntries(true),
+          fetchUpcomingCalendarCount(true),
+          fetchScheduledPostsCount(true),
+          fetchTodaysNewLeadsCount(true)
+        ])
+      }
+
+      showSuccess('Data refreshed', 'All data has been updated with fresh information.')
+    } catch (error) {
+      console.error('Error refreshing data:', error)
+      showError('Refresh failed', 'There was an error refreshing the data.')
+    }
+  }
+
+  const handleCreateNewPost = async (payload) => {
+    try {
+      const token = localStorage.getItem('authToken')
+      if (!token) {
+        showError('Authentication Error', 'Please log in to create content.')
+        return
+      }
+
+      // Open the chatbot to show content generation
+      setShowChatbot(true)
+
+      // Send the payload to create content via chatbot
+      const response = await fetch(`${API_BASE_URL}/atsn/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          message: `Create content with these specifications: ${JSON.stringify(payload, null, 2)}`,
+          user_id: user?.id
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to create post')
+      }
+
+      // The chatbot will handle displaying the content generation process
+      // No need to show additional success message since chatbot will show the result
+
+    } catch (error) {
+      console.error('Error creating post:', error)
+      showError('Creation Failed', error.message || 'There was an error creating your post. Please try again.')
+      setShowChatbot(false) // Close chatbot on error
+    }
+  }
+
   // Fetch overdue leads count
   const fetchOverdueLeadsCount = async (forceRefresh = false) => {
     if (!user) return
 
-    const CACHE_KEY = `leads_data_${user.id}`
+    const CACHE_KEY = `overdue_leads_count_${user.id}`
     const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
 
     try {
-      // Check if we have cached leads data
+      // Check if we have cached data from today
       if (!forceRefresh) {
         const cachedData = localStorage.getItem(CACHE_KEY)
         if (cachedData) {
-          const { leads, count, timestamp } = JSON.parse(cachedData)
+          const { count, timestamp } = JSON.parse(cachedData)
           const cacheAge = Date.now() - timestamp
 
           // Use cached data if it's less than 24 hours old
-          if (cacheAge < CACHE_EXPIRATION_MS && leads && Array.isArray(leads)) {
-            console.log('Using cached leads data:', leads.length, 'leads, overdue count:', count)
+          if (cacheAge < CACHE_EXPIRATION_MS) {
+            console.log('Using cached overdue leads count:', count)
             setOverdueLeadsCount(count)
             setOverdueLeadsLoading(false)
             return
@@ -242,45 +324,23 @@ function EmilyDashboard() {
       }
 
       setOverdueLeadsLoading(true)
-      const leadsAPI = (await import('../services/leads')).leadsAPI
 
-      // Get all leads using pagination (API limit is 100 per request)
-      let allLeads = []
-      let offset = 0
-      const limit = 100
+      // Get all leads using Supabase directly (like todaysNewLeadsCount)
+      const { data: allLeads, error } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('user_id', user.id)
 
-      while (true) {
-        const response = await leadsAPI.getLeads({ limit, offset })
-
-        // Handle both old format (array) and new format (object with leads array)
-        let leads = []
-        let hasMore = false
-
-        if (Array.isArray(response.data)) {
-          // Old format - backward compatibility
-          leads = response.data
-          hasMore = leads.length === limit
-        } else if (response.data && response.data.leads) {
-          // New format with pagination metadata
-          leads = response.data.leads || []
-          hasMore = response.data.has_more !== undefined ? response.data.has_more : leads.length === limit
-        }
-
-        if (leads.length === 0) break // No more leads
-
-        allLeads = [...allLeads, ...leads]
-
-        // Use has_more flag if available, otherwise check if we got a full page
-        if (!hasMore) break
-
-        offset += limit
-
-        // Safety check to prevent infinite loops
-        if (offset > 10000) break
+      if (error) {
+        console.error('Error fetching leads for overdue count:', error)
+        setOverdueLeadsCount(0)
+        return
       }
 
       console.log('Total leads fetched for overdue count:', allLeads.length)
-      console.log('Sample leads with follow_up_at:', allLeads.filter(l => l.follow_up_at).slice(0, 5))
+      console.log('All leads sample:', allLeads.slice(0, 10))
+      console.log('Leads with follow_up_at:', allLeads.filter(l => l.follow_up_at))
+      console.log('Sample leads with follow_up_at:', allLeads.filter(l => l.follow_up_at).slice(0, 10))
 
       // Count leads with overdue follow-ups (follow-up date shows "ago" or "Yesterday")
       const overdueCount = allLeads.filter(lead => {
@@ -298,16 +358,17 @@ function EmilyDashboard() {
             id: lead.id,
             name: lead.name,
             follow_up_at: lead.follow_up_at,
-            diffInDays: diffInDays
+            diffInDays: diffInDays,
+            followUpDate: followUpDate.toISOString(),
+            today: today.toISOString()
           })
         }
 
         return isOverdue
       }).length
 
-      // Cache the full leads data and count with current timestamp
+      // Cache the result with current timestamp
       const cacheData = {
-        leads: allLeads,
         count: overdueCount,
         timestamp: Date.now()
       }
@@ -444,6 +505,226 @@ function EmilyDashboard() {
     }
   }
 
+  // Fetch upcoming calendar content for next 7 days
+  const fetchUpcomingCalendarCount = async (forceRefresh = false) => {
+    if (!user) return
+
+    const CACHE_KEY = `upcoming_calendar_count_${user.id}`
+    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+    try {
+      // Check if we have cached data
+      if (!forceRefresh) {
+        const cachedData = localStorage.getItem(CACHE_KEY)
+        if (cachedData) {
+          const { count, timestamp } = JSON.parse(cachedData)
+          const cacheAge = Date.now() - timestamp
+
+          // Use cached data if less than 24 hours old
+          if (cacheAge < CACHE_EXPIRATION_MS) {
+            console.log('Using cached upcoming calendar count:', count)
+            setUpcomingCalendarCount(count)
+            setUpcomingCalendarLoading(false)
+            return
+          }
+        }
+      }
+
+      setUpcomingCalendarLoading(true)
+      const token = await supabase.auth.getSession().then(res => res.data.session?.access_token)
+
+      if (!token) return
+
+      // Get date range for next 7 days
+      const today = new Date()
+      const nextWeek = new Date(today)
+      nextWeek.setDate(today.getDate() + 7)
+
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      const nextWeekStr = `${nextWeek.getFullYear()}-${String(nextWeek.getMonth() + 1).padStart(2, '0')}-${String(nextWeek.getDate()).padStart(2, '0')}`
+
+      // Fetch all calendars for the user
+      const calendarsResponse = await fetch(`${API_BASE_URL}/calendars`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (calendarsResponse.ok) {
+        const calendars = await calendarsResponse.json()
+
+        // Fetch entries for each calendar and filter for next 7 days
+        let upcomingCount = 0
+        for (const calendar of calendars) {
+          const entriesResponse = await fetch(`${API_BASE_URL}/calendars/${calendar.id}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+
+          if (entriesResponse.ok) {
+            const calendarData = await entriesResponse.json()
+            const entries = calendarData.entries || []
+
+            // Filter for entries in the next 7 days (excluding today)
+            const upcomingEntries = entries.filter(entry => {
+              const entryDate = new Date(entry.entry_date)
+              const entryDateStr = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`
+              return entryDateStr > todayStr && entryDateStr <= nextWeekStr
+            })
+
+            upcomingCount += upcomingEntries.length
+          }
+        }
+
+        // Cache the result with current timestamp
+        const cacheData = {
+          count: upcomingCount,
+          timestamp: Date.now()
+        }
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
+
+        console.log('Upcoming calendar content count (next 7 days):', upcomingCount)
+        setUpcomingCalendarCount(upcomingCount)
+      }
+    } catch (error) {
+      console.error('Error fetching upcoming calendar count:', error)
+      setUpcomingCalendarCount(0)
+    } finally {
+      setUpcomingCalendarLoading(false)
+    }
+  }
+
+  // Fetch scheduled posts count from created_content table
+  const fetchScheduledPostsCount = async (forceRefresh = false) => {
+    if (!user) return
+
+    const CACHE_KEY = `scheduled_posts_count_${user.id}`
+    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+    try {
+      // Check if we have cached data
+      if (!forceRefresh) {
+        const cachedData = localStorage.getItem(CACHE_KEY)
+        if (cachedData) {
+          const { count, timestamp } = JSON.parse(cachedData)
+          const cacheAge = Date.now() - timestamp
+
+          // Use cached data if less than 24 hours old
+          if (cacheAge < CACHE_EXPIRATION_MS) {
+            console.log('Using cached scheduled posts count:', count)
+            setScheduledPostsCount(count)
+            setScheduledPostsLoading(false)
+            return
+          }
+        }
+      }
+
+      setScheduledPostsLoading(true)
+
+      // Fetch scheduled posts from content_posts table (joined with content_campaigns for user filtering)
+      const { data, error } = await supabase
+        .from('content_posts')
+        .select('id, content_campaigns!inner(*)')
+        .eq('content_campaigns.user_id', user.id)
+        .eq('status', 'scheduled')
+        .gte('scheduled_date', new Date().toISOString().split('T')[0]) // From today onwards
+
+      if (error) {
+        console.error('Error fetching scheduled posts:', error)
+        setScheduledPostsCount(0)
+      } else {
+        const count = data?.length || 0
+
+        // Cache the result with current timestamp
+        const cacheData = {
+          count: count,
+          timestamp: Date.now()
+        }
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
+
+        console.log('Scheduled posts count:', count)
+        console.log('Scheduled posts data:', data)
+        setScheduledPostsCount(count)
+      }
+    } catch (error) {
+      console.error('Error fetching scheduled posts count:', error)
+      setScheduledPostsCount(0)
+    } finally {
+      setScheduledPostsLoading(false)
+    }
+  }
+
+  // Fetch today's new leads count
+  const fetchTodaysNewLeadsCount = async (forceRefresh = false) => {
+    if (!user) return
+
+    const CACHE_KEY = `todays_new_leads_count_${user.id}`
+    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+    try {
+      // Check if we have cached data
+      if (!forceRefresh) {
+        const cachedData = localStorage.getItem(CACHE_KEY)
+        if (cachedData) {
+          const { count, timestamp, date } = JSON.parse(cachedData)
+          const cacheAge = Date.now() - timestamp
+          const today = new Date().toDateString()
+
+          // Use cached data if it's from today and less than 24 hours old
+          if (date === today && cacheAge < CACHE_EXPIRATION_MS) {
+            console.log('Using cached todays new leads count:', count)
+            setTodaysNewLeadsCount(count)
+            setTodaysNewLeadsLoading(false)
+            return
+          }
+        }
+      }
+
+      setTodaysNewLeadsLoading(true)
+
+      // Get today's date range
+      const today = new Date()
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999)
+
+      // Fetch leads created today from Supabase
+      const { data, error } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('user_id', user.id)
+        .gte('created_at', startOfDay.toISOString())
+        .lte('created_at', endOfDay.toISOString())
+
+      if (error) {
+        console.error('Error fetching todays new leads:', error)
+        setTodaysNewLeadsCount(0)
+      } else {
+        const count = data?.length || 0
+
+        // Cache the result with current timestamp and date
+        const cacheData = {
+          count: count,
+          timestamp: Date.now(),
+          date: today.toDateString()
+        }
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
+
+        console.log('Todays new leads count:', count)
+        setTodaysNewLeadsCount(count)
+      }
+    } catch (error) {
+      console.error('Error fetching todays new leads count:', error)
+      setTodaysNewLeadsCount(0)
+    } finally {
+      setTodaysNewLeadsLoading(false)
+    }
+  }
+
   // Fetch overdue leads count periodically (cached for 24 hours)
   useEffect(() => {
     if (user) {
@@ -460,6 +741,36 @@ function EmilyDashboard() {
       fetchTodayCalendarEntries()
       // Refresh every 24 hours
       const interval = setInterval(() => fetchTodayCalendarEntries(true), 24 * 60 * 60 * 1000)
+      return () => clearInterval(interval)
+    }
+  }, [user])
+
+  // Fetch upcoming calendar content count
+  useEffect(() => {
+    if (user) {
+      fetchUpcomingCalendarCount()
+      // Refresh every 24 hours
+      const interval = setInterval(() => fetchUpcomingCalendarCount(true), 24 * 60 * 60 * 1000)
+      return () => clearInterval(interval)
+    }
+  }, [user])
+
+  // Fetch scheduled posts count
+  useEffect(() => {
+    if (user) {
+      fetchScheduledPostsCount()
+      // Refresh every 24 hours
+      const interval = setInterval(() => fetchScheduledPostsCount(true), 24 * 60 * 60 * 1000)
+      return () => clearInterval(interval)
+    }
+  }, [user])
+
+  // Fetch today's new leads count
+  useEffect(() => {
+    if (user) {
+      fetchTodaysNewLeadsCount()
+      // Refresh every hour for more frequent updates on new leads
+      const interval = setInterval(() => fetchTodaysNewLeadsCount(true), 60 * 60 * 1000)
       return () => clearInterval(interval)
     }
   }, [user])
@@ -507,7 +818,28 @@ function EmilyDashboard() {
 
       if (response.ok) {
         const data = await response.json()
-        setConversations(data.conversations || [])
+        const cleanedConversations = (data.conversations || []).map(conv => {
+          // Clean messages text to remove stray characters
+          if (conv.messages && Array.isArray(conv.messages)) {
+            conv.messages = conv.messages.map(msg => {
+              if (msg.text) {
+                let cleanText = msg.text;
+                // Remove trailing )} patterns
+                cleanText = cleanText.replace(/\s*\)\s*\}\s*$/g, '').trim();
+                // Remove any standalone )} patterns
+                cleanText = cleanText.replace(/\s*\)\s*\}\s*/g, '');
+                // Remove other stray patterns
+                cleanText = cleanText.replace(/^[\(\[\{\*\)\]\}\s]*/g, '').replace(/[\(\[\{\*\)\]\}\s]*$/g, '').trim();
+                // Remove multiple consecutive braces
+                cleanText = cleanText.replace(/[\(\)\{\}\[\]\*]{2,}/g, '').trim();
+                msg.text = cleanText;
+              }
+              return msg;
+            });
+          }
+          return conv;
+        });
+        setConversations(cleanedConversations)
       }
     } catch (error) {
       console.error('Error fetching today conversations:', error)
@@ -584,11 +916,11 @@ function EmilyDashboard() {
 
 
   return (
-    <div className={`h-screen overflow-hidden md:overflow-auto custom-scrollbar ${
+    <div className={`h-screen overflow-hidden custom-scrollbar ${
       isDarkMode ? 'bg-gray-900 dark-mode' : 'bg-white light-mode'
     }`}>
       {/* Mobile Navigation */}
-      <MobileNavigation 
+      <MobileNavigation
         setShowCustomContentChatbot={() => {}} // Dashboard doesn't have these functions
         handleGenerateContent={() => {}}
         generating={false}
@@ -601,14 +933,14 @@ function EmilyDashboard() {
         }}
         showChatHistory={showMobileChatHistory}
       />
-      
+
       {/* Side Navbar */}
       <SideNavbar />
-      
+
       {/* Main Content */}
-      <div className={`md:ml-48 xl:ml-64 flex flex-col h-screen overflow-hidden pt-16 md:pt-0 bg-transparent ${
+      <div className={`md:ml-48 xl:ml-64 flex flex-col overflow-hidden pt-16 md:pt-0 bg-transparent ${
         isDarkMode ? 'md:bg-gray-900' : 'md:bg-white'
-      }`}>
+      }`} style={{ height: '100vh', overflow: 'hidden' }}>
         {/* Header */}
         <div className={`hidden md:block shadow-sm border-b z-30 flex-shrink-0 ${
           isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
@@ -684,6 +1016,21 @@ function EmilyDashboard() {
               </div>
               
               <div className="flex items-center gap-2">
+                {/* Refresh Button */}
+                <button
+                  onClick={handleRefreshAllData}
+                  className={`p-2 rounded-md transition-colors border ${
+                    isDarkMode
+                      ? 'hover:bg-gray-700 border-gray-600 text-gray-300'
+                      : 'hover:bg-gray-100 border-gray-200'
+                  }`}
+                  title="Refresh all data"
+                >
+                  <RefreshCw className={`w-5 h-5 ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`} />
+                </button>
+
                 {/* Panel Toggle Button */}
                 <button
                   onClick={() => setIsPanelOpen(!isPanelOpen)}
@@ -710,18 +1057,39 @@ function EmilyDashboard() {
         </div>
 
         {/* Main Content Area */}
-        <div className={`flex-1 flex items-start bg-transparent ${
+        <div className={`flex-1 flex bg-transparent ${
           isDarkMode ? 'md:bg-gray-800' : 'md:bg-gray-50'
         }`} style={{ minHeight: 0, overflow: 'hidden' }}>
             <div className="w-full h-full flex gap-2">
                 {/* Main Chat Area */}
               <div className="flex-1 h-full overflow-hidden">
-                <div className={`h-full relative pt-0.5 px-8 overflow-y-auto custom-scrollbar ${
+                <div className={`h-full relative ${
                   isDarkMode ? 'dark-mode' : 'light-mode'
                 }`}>
-                  <ATSNChatbot
-                    key="atsn-chatbot-fresh"
-                  />
+                  {showChatbot ? (
+                    <div className="h-full pt-0.5 px-8">
+                      <ATSNChatbot
+                        key="atsn-chatbot-fresh"
+                        onMinimize={() => setShowChatbot(false)}
+                      />
+                    </div>
+                  ) : (
+                    <AgentCards
+                      isDarkMode={isDarkMode}
+                      onInputClick={() => setShowChatbot(true)}
+                      upcomingCalendarCount={upcomingCalendarCount}
+                      upcomingCalendarLoading={upcomingCalendarLoading}
+                      scheduledPostsCount={scheduledPostsCount}
+                      scheduledPostsLoading={scheduledPostsLoading}
+                      overdueLeadsCount={overdueLeadsCount}
+                      overdueLeadsLoading={overdueLeadsLoading}
+                      todaysNewLeadsCount={todaysNewLeadsCount}
+                      todaysNewLeadsLoading={todaysNewLeadsLoading}
+                      todayCalendarEntries={todayCalendarEntries}
+                      calendarEntriesLoading={calendarEntriesLoading}
+                      navigate={navigate}
+                    />
+                  )}
                 </div>
               </div>
 
@@ -752,100 +1120,7 @@ function EmilyDashboard() {
 
                     {/* Panel Content - Scrollable */}
                     <div className="flex-1 p-3 lg:p-4 overflow-y-auto min-h-0">
-                      {/* Overdue Leads Count - Only show after loading */}
-                      {!overdueLeadsLoading && (
-                        <div
-                          className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                            isDarkMode
-                              ? 'bg-gray-800 border-gray-600 hover:bg-gray-700'
-                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                          }`}
-                          onClick={() => navigate('/leads?filter=overdue_followups')}
-                          title="Click to view all leads"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <span className={`text-sm font-bold ${
-                              overdueLeadsCount > 0
-                                ? 'text-yellow-600'
-                                : isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                            }`}>
-                              {overdueLeadsCount}
-                            </span>
-                            <span className={`text-sm font-medium ${
-                              isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                            }`}>
-                              : Leads to follow up
-                            </span>
-                          </div>
-                          {overdueLeadsCount > 0 && (
-                            <p className={`text-xs mt-1 ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                            }`}>
-                              {overdueLeadsCount === 1 ? 'Lead has' : 'Leads have'} overdue follow-ups
-                            </p>
-                          )}
-                        </div>
-                      )}
 
-                      {/* Today's Calendar Entries - Only show after loading */}
-                      {!calendarEntriesLoading && (
-                        <div className="mt-3">
-                          <div
-                            className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                              isDarkMode
-                                ? 'bg-gray-800 border-gray-600 hover:bg-gray-700'
-                                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                            }`}
-                            onClick={() => navigate('/calendars')}
-                            title="Click to view calendar"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <span className={`text-sm font-bold ${
-                                todayCalendarEntries.length > 0
-                                  ? 'text-yellow-600'
-                                  : isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                              }`}>
-                                {todayCalendarEntries.length}
-                              </span>
-                              <span className={`text-sm font-medium ${
-                                isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                              }`}>
-                                : Suggested content for today
-                              </span>
-                    </div>
-                            {todayCalendarEntries.length > 0 && (
-                              <div className="mt-2 space-y-1">
-                                {todayCalendarEntries.slice(0, 3).map((entry, idx) => (
-                                  <div
-                                    key={idx}
-                                    className={`text-xs p-2 rounded ${
-                                      isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-                                    }`}
-                                  >
-                                    <div className={`font-medium ${
-                                      isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                                    }`}>
-                                      {entry.topic}
-                                    </div>
-                                    <div className={`text-xs mt-0.5 ${
-                                      isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                                    }`}>
-                                      {entry.content_type?.replace('_', ' ')} • {entry.platform}
-                                    </div>
-                                  </div>
-                                ))}
-                                {todayCalendarEntries.length > 3 && (
-                                  <div className={`text-xs ${
-                                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                                  }`}>
-                                    +{todayCalendarEntries.length - 3} more
-                  </div>
-                )}
-          </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
@@ -854,7 +1129,155 @@ function EmilyDashboard() {
       </div>
       </div>
 
-      
+      {/* Quick Actions - only show when not showing chatbot */}
+      {!showChatbot && (
+        <div className="fixed bottom-20 left-0 right-0 z-10 p-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div
+                onClick={() => setShowNewPostModal(true)}
+                className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-lg ${
+                  isDarkMode
+                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex flex-col items-center text-center space-y-2">
+                  <div className={`p-3 rounded-lg ${
+                    isDarkMode ? 'bg-blue-900/50' : 'bg-blue-100'
+                  }`}>
+                    <svg className={`w-6 h-6 ${
+                      isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <span className={`text-sm font-medium ${
+                    isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                  }`}>
+                    Design a new post
+                  </span>
+                </div>
+              </div>
+
+              <div
+                onClick={() => navigate('/content')}
+                className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-lg ${
+                  isDarkMode
+                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex flex-col items-center text-center space-y-2">
+                  <div className={`p-3 rounded-lg ${
+                    isDarkMode ? 'bg-green-900/50' : 'bg-green-100'
+                  }`}>
+                    <svg className={`w-6 h-6 ${
+                      isDarkMode ? 'text-green-400' : 'text-green-600'
+                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                  </div>
+                  <span className={`text-sm font-medium ${
+                    isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                  }`}>
+                    Upload a new post
+                  </span>
+                </div>
+              </div>
+
+              <div
+                onClick={() => navigate('/leads')}
+                className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-lg ${
+                  isDarkMode
+                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex flex-col items-center text-center space-y-2">
+                  <div className={`p-3 rounded-lg ${
+                    isDarkMode ? 'bg-purple-900/50' : 'bg-purple-100'
+                  }`}>
+                    <svg className={`w-6 h-6 ${
+                      isDarkMode ? 'text-purple-400' : 'text-purple-600'
+                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                    </svg>
+                  </div>
+                  <span className={`text-sm font-medium ${
+                    isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                  }`}>
+                    Upload a new lead
+                  </span>
+                </div>
+              </div>
+
+              <div
+                onClick={() => navigate('/analytics')}
+                className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-lg ${
+                  isDarkMode
+                    ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex flex-col items-center text-center space-y-2">
+                  <div className={`p-3 rounded-lg ${
+                    isDarkMode ? 'bg-orange-900/50' : 'bg-orange-100'
+                  }`}>
+                    <svg className={`w-6 h-6 ${
+                      isDarkMode ? 'text-orange-400' : 'text-orange-600'
+                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <span className={`text-sm font-medium ${
+                    isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                  }`}>
+                    Quick Analytics
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Input Bar at bottom of dashboard - only show when not showing chatbot */}
+      {!showChatbot && (
+        <div className="fixed bottom-0 left-0 right-0 z-10 p-4">
+          <div className="max-w-2xl mx-auto">
+            <div className="relative">
+              <div
+                onClick={() => setShowChatbot(true)}
+                className={`w-full px-6 pr-14 py-4 text-base rounded-[20px] backdrop-blur-sm cursor-pointer transition-all hover:shadow-lg ${
+                  isDarkMode
+                    ? 'bg-gray-700/80 border-0 hover:bg-gray-600/80 text-gray-100'
+                    : 'bg-white/80 border border-white/20 hover:bg-gray-50/80 text-gray-900'
+                }`}
+              >
+                <span className={`${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  Talk to your AI teammates
+                </span>
+              </div>
+              <div className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-7 h-7 transition-all flex items-center justify-center cursor-pointer ${
+                isDarkMode
+                  ? 'text-green-400 hover:text-green-300'
+                  : 'text-blue-600 hover:text-blue-700'
+              }`}>
+                <Send className="w-5 h-5 transform rotate-45" />
+              </div>
+            </div>
+
+            <div className={`mt-2 text-xs text-center ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+            }`}>
+              Click to start a conversation
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Today's Conversations Panel - Full Screen */}
       {showMobileChatHistory && (
@@ -912,8 +1335,20 @@ function EmilyDashboard() {
                     if (!lastMessage) return null
                     
                     const isUser = lastMessage.sender === 'user'
-                    const preview = lastMessage.text?.substring(0, 100) +
-                      (lastMessage.text?.length > 100 ? '...' : '')
+
+                    // Clean message text to remove stray characters
+                    let cleanText = lastMessage.text || '';
+                    // Remove trailing )} patterns (with or without whitespace)
+                    cleanText = cleanText.replace(/\s*\)\s*\}\s*$/g, '').trim();
+                    // Remove any standalone )} patterns throughout the text
+                    cleanText = cleanText.replace(/\s*\)\s*\}\s*/g, '');
+                    // Remove other common stray patterns: (, {, [, ], *, etc. at start/end
+                    cleanText = cleanText.replace(/^[\(\[\{\*\)\]\}\s]*/g, '').replace(/[\(\[\{\*\)\]\}\s]*$/g, '').trim();
+                    // Remove multiple consecutive braces/brackets
+                    cleanText = cleanText.replace(/[\(\)\{\}\[\]\*]{2,}/g, '').trim();
+
+                    const preview = cleanText?.substring(0, 100) +
+                      (cleanText?.length > 100 ? '...' : '')
                     
                     return (
                       <div key={conv.id} className={`p-3 rounded-lg border ${
@@ -971,6 +1406,14 @@ function EmilyDashboard() {
           </div>
         </div>
       )}
+
+      {/* New Post Modal */}
+      <NewPostModal
+        isOpen={showNewPostModal}
+        onClose={() => setShowNewPostModal(false)}
+        onSubmit={handleCreateNewPost}
+        isDarkMode={isDarkMode}
+      />
     </div>
   )
 }

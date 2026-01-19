@@ -286,38 +286,6 @@ class ContentAPI {
     }
   }
 
-  // Get created content from created_content table
-  async getCreatedContent(limit = 50, offset = 0) {
-    try {
-      const authToken = await this.getAuthToken()
-      console.log('Fetching created content with token:', authToken ? 'present' : 'missing')
-
-      const response = await fetch(buildApiUrl(`/content/created-content?limit=${limit}&offset=${offset}`), {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        }
-      })
-
-      console.log('Created content response status:', response.status)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('Created content API error:', errorText)
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log('Created content data:', data)
-
-      return { data: data.data || [], count: data.count, error: null }
-    } catch (error) {
-      console.error('Error fetching created content:', error)
-      return { data: null, error: error.message }
-    }
-  }
-
   // Delete created content (with automatic social media deletion)
   async deleteCreatedContent(contentId) {
     try {

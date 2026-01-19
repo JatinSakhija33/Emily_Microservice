@@ -132,6 +132,7 @@ const LeadsDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState(null)
+  const [pollingInterval, setPollingInterval] = useState(null)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedLeadIds, setSelectedLeadIds] = useState(new Set())
   const [deletingBulk, setDeletingBulk] = useState(false)
@@ -139,46 +140,13 @@ const LeadsDashboard = () => {
   const leadsRef = useRef([])
   const lastFetchTimeRef = useRef(null)
 
-  // Leads data state
+  // Load all leads at once - no pagination
+  const [loadedCount, setLoadedCount] = useState(0)
   const [total, setTotal] = useState(0)
-  const pageSize = 50 // Load 50 leads at a time
+  const pageSize = 500 // Load maximum allowed leads (backend limit)
 
-  // Ref for intersection observer
-
-  const fetchLeads = useCallback(async (showLoading = true, forceRefresh = false) => {
-    if (!user) return
-
-    const CACHE_KEY = `leads_dashboard_${user.id}_${filterStatus}_${filterPlatform}`
-    const CACHE_EXPIRATION_MS = 24 * 60 * 60 * 1000 // 24 hours
-
+  const fetchLeads = useCallback(async (showLoading = true) => {
     try {
-      // Check if we have cached data (unless force refresh)
-      if (!forceRefresh) {
-        const cachedData = localStorage.getItem(CACHE_KEY)
-        if (cachedData) {
-          const { leads: cachedLeads, total: cachedTotal, timestamp } = JSON.parse(cachedData)
-          const cacheAge = Date.now() - timestamp
-
-          // Use cached data if it's less than 24 hours old
-          if (cacheAge < CACHE_EXPIRATION_MS && Array.isArray(cachedLeads)) {
-            console.log('Using cached leads data:', cachedLeads.length, 'leads')
-
-            setLeads(cachedLeads)
-            setTotal(cachedTotal || cachedLeads.length)
-
-            // Update refs
-            leadsRef.current = cachedLeads
-            const now = new Date()
-            setLastFetchTime(now)
-            lastFetchTimeRef.current = now
-
-            if (showLoading) setLoading(false)
-            return
-          }
-        }
-      }
-
-      // No valid cache or force refresh - fetch all leads at once
       if (showLoading) setLoading(true)
 
       const params = {}
@@ -188,99 +156,77 @@ const LeadsDashboard = () => {
       if (filterPlatform !== 'all') {
         params.source_platform = filterPlatform
       }
+      params.limit = pageSize
 
-      // Fetch ALL leads at once (no pagination for dashboard)
-      let allLeads = []
-      let offset = 0
-      const limit = 200 // Backend max limit is 200
+      const response = await leadsAPI.getLeads(params)
 
-      while (true) {
-        params.limit = limit
-        params.offset = offset
+      // Handle both old format (array) and new format (object with leads array)
+      let fetchedLeads = []
+      let totalCount = 0
+      let hasMoreData = false
 
-        const response = await leadsAPI.getLeads(params)
-
-        // Handle both old format (array) and new format (object with leads array)
-        let fetchedLeads = []
-        let hasMoreData = false
-
-        if (Array.isArray(response.data)) {
-          // Old format - backward compatibility (just an array of leads)
-          fetchedLeads = response.data
-          hasMoreData = fetchedLeads.length === limit
-        } else if (response.data && response.data.leads) {
-          // New format with pagination metadata
-          fetchedLeads = response.data.leads || []
-          hasMoreData = response.data.has_more !== undefined ? response.data.has_more : fetchedLeads.length === limit
-        }
-
-        allLeads = [...allLeads, ...fetchedLeads]
-
-        if (!hasMoreData || fetchedLeads.length === 0) break
-        offset += limit
-
-        // Safety check to prevent infinite loops
-        if (offset > 50000) break
+      if (Array.isArray(response.data)) {
+        // Old format - backward compatibility (just an array of leads)
+        fetchedLeads = response.data
+        totalCount = fetchedLeads.length
+        hasMoreData = false // Load all leads at once, no pagination
+      } else if (response.data && response.data.leads) {
+        // New format with pagination metadata
+        fetchedLeads = response.data.leads || []
+        totalCount = response.data.total || fetchedLeads.length
+        hasMoreData = false // Load all leads at once, no pagination
+      } else {
+        fetchedLeads = []
+        totalCount = 0
+        hasMoreData = false
       }
 
-      console.log('Fetched all leads for dashboard:', allLeads.length)
+      // Check for new leads using refs to avoid dependency issues (only on first load)
+      if (loadedCount === 0) {
+        const previousLeads = leadsRef.current
+        const previousFetchTime = lastFetchTimeRef.current
 
-      // Check for new leads using refs to avoid dependency issues
-      const previousLeads = leadsRef.current
-      const previousFetchTime = lastFetchTimeRef.current
+        if (previousFetchTime && previousLeads.length > 0) {
+          const newLeads = fetchedLeads.filter(newLead => {
+            const newLeadTime = new Date(newLead.created_at)
+            return newLeadTime > previousFetchTime && !previousLeads.find(l => l.id === newLead.id)
+          })
 
-      if (previousFetchTime && previousLeads.length > 0) {
-        const newLeads = allLeads.filter(newLead => {
-          const newLeadTime = new Date(newLead.created_at)
-          return newLeadTime > previousFetchTime && !previousLeads.find(l => l.id === newLead.id)
-        })
-
-        if (newLeads.length > 0) {
-          showInfo(
-            'New Lead!',
-            `${newLeads.length} new lead${newLeads.length > 1 ? 's' : ''} received`,
-            {
-              type: 'lead',
-              leadIds: newLeads.map(l => l.id)
-            }
-          )
+          if (newLeads.length > 0) {
+            showInfo(
+              'New Lead!',
+              `${newLeads.length} new lead${newLeads.length > 1 ? 's' : ''} received`,
+              {
+                type: 'lead',
+                leadIds: newLeads.map(l => l.id)
+              }
+            )
+          }
         }
       }
 
-      // Update state
-      setLeads(allLeads)
-      setTotal(allLeads.length)
+      // Update state and refs
+      setLeads(fetchedLeads)
+      setLoadedCount(fetchedLeads.length)
 
-      // Update refs
-      leadsRef.current = allLeads
+      setTotal(totalCount)
+      // Load all leads at once, no pagination needed
+
+      console.log(`FetchLeads: fetched=${fetchedLeads.length}, total=${totalCount}`)
+
+      leadsRef.current = fetchedLeads
+
       const now = new Date()
       setLastFetchTime(now)
       lastFetchTimeRef.current = now
 
-      // Cache the complete leads data
-      const cacheData = {
-        leads: allLeads,
-        total: allLeads.length,
-        timestamp: Date.now()
-      }
-      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
-
-      console.log('Cached all leads data for dashboard')
-
     } catch (error) {
       console.error('Error fetching leads:', error)
-      console.error('Error details:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        url: error.config?.url
-      })
-      showError('Error', `Failed to fetch leads: ${error.message}`)
+      showError('Error', 'Failed to fetch leads. Please try again.')
     } finally {
       if (showLoading) setLoading(false)
     }
-  }, [user, filterStatus, filterPlatform, showError, showInfo])
+  }, [filterStatus, filterPlatform, pageSize, showError, showInfo])
 
   // Clear leads data on logout
   useEffect(() => {
@@ -291,9 +237,17 @@ const LeadsDashboard = () => {
       setShowDetailModal(false)
       setSelectedLeadIds(new Set())
       setSelectionMode(false)
+      setLoadedCount(0)
     }
   }, [user])
 
+  // Clear polling interval on logout
+  useEffect(() => {
+    if (!user && pollingInterval) {
+      clearInterval(pollingInterval)
+      setPollingInterval(null)
+    }
+  }, [user, pollingInterval])
 
   // Check for URL parameters to apply filters
   useEffect(() => {
@@ -308,6 +262,12 @@ const LeadsDashboard = () => {
     }
   }, [])
 
+  // Reset loaded count when filters change
+  useEffect(() => {
+    if (user) {
+      setLoadedCount(0)
+    }
+  }, [user, filterStatus, filterPlatform])
 
   // Initial fetch and refetch when filters change
   useEffect(() => {
@@ -316,7 +276,7 @@ const LeadsDashboard = () => {
     }
   }, [user, filterStatus, filterPlatform]) // Removed fetchLeads from dependencies
 
-  // No more infinite scrolling - all leads loaded at once and cached
+  // No infinite scrolling - all leads loaded at once
 
   // Handle leadId from URL query parameter (for opening lead from chatbot link)
   useEffect(() => {
@@ -352,7 +312,20 @@ const LeadsDashboard = () => {
     }
   }, [showFilterDropdown])
 
-  // No polling needed - data cached for 24 hours and refreshed on demand
+  // Set up polling for new leads
+  useEffect(() => {
+    if (!user) return
+
+    const interval = setInterval(() => {
+      fetchLeads(false) // Don't show loading spinner for polling
+    }, 30000) // Poll every 30 seconds
+
+    setPollingInterval(interval)
+
+    return () => {
+      clearInterval(interval)
+    }
+  }, [user, fetchLeads])
 
   const handleLeadClick = (lead) => {
     setSelectedLead(lead)
@@ -522,7 +495,7 @@ const LeadsDashboard = () => {
   }
 
   const handleRefresh = () => {
-    fetchLeads(true, true) // showLoading=true, forceRefresh=true
+    fetchLeads()
     showSuccess('Refreshed', 'Leads list updated')
   }
 
@@ -1154,12 +1127,16 @@ const LeadsDashboard = () => {
         </div>
       </div>
 
-      {/* Total leads indicator */}
-      {leads.length > 0 && (
-        <div className={`text-center py-4 text-sm ${
+      {/* No infinite scroll loading - all leads loaded at once */}
+
+      {/* No infinite scroll - all leads loaded at once */}
+
+      {/* End of list indicator */}
+      {loadedCount > 0 && (
+        <div className={`text-center py-6 text-sm ${
           isDarkMode ? 'text-gray-400' : 'text-gray-600'
         }`}>
-          Total leads: {leads.length}
+          All leads loaded - {loadedCount} of {total} leads
         </div>
       )}
 

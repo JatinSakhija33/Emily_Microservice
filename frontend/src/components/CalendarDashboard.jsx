@@ -240,7 +240,26 @@ const CalendarDashboard = () => {
     return filtered
   }
 
-  // Handle date click to open modal
+  // Handle entry click to open modal for single entry
+  const handleEntryClick = (entry, event) => {
+    event.stopPropagation() // Prevent date click
+
+    // If content has been created for this calendar entry, navigate to content view
+    if (entry.content_id) {
+      console.log('Content exists for calendar entry, navigating to content view:', entry.content_id)
+      // Navigate to content dashboard with the specific content
+      window.location.href = `/content?content_id=${entry.content_id}&from_calendar=true`
+      return
+    }
+
+    // Otherwise, open the calendar modal
+    const entryDate = new Date(entry.entry_date)
+    setSelectedDate(entryDate.toISOString())
+    setSelectedEntries([entry]) // Single entry in array
+    setIsModalOpen(true)
+  }
+
+  // Handle date click to open modal for all entries (fallback)
   const handleDateClick = (day, dayEntries) => {
     if (dayEntries && dayEntries.length > 0) {
       const clickedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day)
@@ -315,7 +334,7 @@ const CalendarDashboard = () => {
           }`}>
             {/* Calendar Header */}
             <div className="flex items-center justify-between mb-6">
-              <h2 className={`text-3xl font-normal ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              <h2 className={`text-3xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                   {monthYear}
                 </h2>
                 <div className="flex gap-2">
@@ -383,9 +402,8 @@ const CalendarDashboard = () => {
                 return (
                   <div
                     key={day}
-                    onClick={() => handleDateClick(day, dayEntries)}
                     className={`h-full border rounded-lg p-3 transition-all duration-200 relative ${
-                      hasEntries ? 'cursor-pointer hover:scale-105' : ''
+                      hasEntries ? 'hover:scale-105' : ''
                     } ${
                       isDarkMode
                         ? 'border-gray-700 hover:border-gray-600 hover:bg-gray-750'
@@ -416,8 +434,9 @@ const CalendarDashboard = () => {
                         {dayEntries.slice(0, 3).map((entry, idx) => (
                           <div
                             key={idx}
-                            className={`text-sm px-2 py-1 rounded ${getContentTypeColor(entry.content_type)}`}
-                            title={entry.topic}
+                            className={`text-sm px-2 py-1 rounded cursor-pointer hover:opacity-80 transition-opacity ${getContentTypeColor(entry.content_type)}`}
+                            title={`${entry.topic} - Click to view details`}
+                            onClick={(event) => handleEntryClick(entry, event)}
                           >
                             <div className="flex items-center gap-1 font-medium truncate">
                               {getPlatformIcon(entry.platform)}
@@ -429,9 +448,14 @@ const CalendarDashboard = () => {
                           </div>
                         ))}
                         {dayEntries.length > 3 && (
-                          <div className={`text-sm px-2 py-1 rounded text-center font-medium ${
-                            isDarkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                          }`}>
+                          <div className={`text-sm px-2 py-1 rounded text-center font-medium cursor-pointer hover:opacity-80 transition-opacity ${
+                            isDarkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          title={`Click to view all ${dayEntries.length} entries for this date`}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleDateClick(day, dayEntries)
+                          }}>
                             +{dayEntries.length - 3} more
                           </div>
                         )}

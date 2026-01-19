@@ -95,13 +95,32 @@ const CalendarContentModal = ({ isOpen, onClose, date, entries, isDarkMode }) =>
         <div className={`flex items-center justify-between p-6 border-b ${
           isDarkMode ? 'border-gray-700' : 'border-gray-200'
         }`}>
-          <div>
-            <h2 className={`text-2xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              {formatDate(date)}
-            </h2>
-            <p className={`text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-              {entries?.length || 0} {entries?.length === 1 ? 'post' : 'posts'} scheduled
-            </p>
+          <div className="flex items-center gap-4">
+            {/* Platform Icon */}
+            <div className={`p-3 rounded-xl ${
+              entries?.length === 1
+                ? getContentTypeColor(entries[0].content_type)
+                : 'bg-blue-500/10 text-blue-500'
+            }`}>
+              {entries?.length === 1
+                ? getPlatformIcon(entries[0].platform)
+                : <Calendar className="w-6 h-6" />
+              }
+            </div>
+
+            <div>
+              <h2 className={`text-2xl font-normal ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                {formatDate(date)}
+              </h2>
+              <p className={`text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                {entries?.length || 0} {entries?.length === 1 ? 'post' : 'posts'} scheduled
+                {entries?.length === 1 && (
+                  <span className="ml-2 text-blue-500 font-medium">
+                    • {capitalizeWords(entries[0].platform)}
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
 
           <button
@@ -136,22 +155,17 @@ const CalendarContentModal = ({ isOpen, onClose, date, entries, isDarkMode }) =>
                 >
                   {/* Card Header */}
                   <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-3 rounded-lg ${getContentTypeColor(entry.content_type)}`}>
-                        {getPlatformIcon(entry.platform)}
-                      </div>
-                      <div>
-                        <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                    <div>
+                        <h3 className={`text-lg font-normal ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                           {entry.topic}
                         </h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className={`text-sm px-2 py-1 rounded ${getContentTypeColor(entry.content_type)}`}>
-                            {capitalizeWords(entry.content_type)}
-                          </span>
-                          <span className={`text-sm px-2 py-1 rounded ${getStatusColor(entry.status)}`}>
-                            {capitalizeWords(entry.status)}
-                          </span>
-                        </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`text-sm px-2 py-1 rounded ${getContentTypeColor(entry.content_type)}`}>
+                          {capitalizeWords(entry.content_type)}
+                        </span>
+                        <span className={`text-sm px-2 py-1 rounded ${getStatusColor(entry.status)}`}>
+                          {capitalizeWords(entry.status)}
+                        </span>
                       </div>
                     </div>
 

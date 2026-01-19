@@ -7,6 +7,9 @@ import os
 import logging
 import re
 import uuid
+import json
+import asyncio
+import aiohttp
 from typing import Dict, Any, List
 from datetime import datetime, timedelta, date
 import google.generativeai as genai
@@ -29,6 +32,11 @@ supabase = create_client(supabase_url, supabase_key) if supabase_url and supabas
 # Initialize OpenAI client
 openai_api_key = os.getenv('OPENAI_API_KEY')
 openai_client = openai.OpenAI(api_key=openai_api_key) if openai_api_key else None
+
+# Grok API configuration (using direct API calls like in atsn.py)
+grok_api_key = os.getenv('GROK_API_KEY')
+grok_api_url = os.getenv('GROK_API_URL', 'https://api.x.ai/v1/chat/completions')
+grok_model = os.getenv('GROK_MODEL', 'grok-4-1-fast-non-reasoning')
 
 # Configure Gemini
 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
@@ -193,6 +201,134 @@ RL_AGENT_MAPPINGS = {
 }
 
 # ==================== FUNCTIONS ====================
+
+async def get_trends_from_grok(industry: str, month: str, year: str) -> List[str]:
+    """Get current trending topics from Grok API for calendar generation"""
+    if not grok_api_key:
+        logger.warning("Grok API key not available, using fallback trends")
+        return [
+            "industry_news", "customer_stories", "behind_scenes",
+            "tips_and_tricks", "product_updates", "community_engagement"
+        ]
+
+    try:
+        prompt = f"""You are a social media trend analyst. What are the top 10 trending topics and content ideas for the {industry} industry in {month} {year}?
+
+        Focus on:
+        - Current news and developments
+        - Seasonal content opportunities
+        - Popular discussion topics
+        - Content formats that are performing well
+
+        Return ONLY a JSON array of strings, no other text. Example: ["topic1", "topic2", "topic3"]"""
+
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                'Authorization': f'Bearer {grok_api_key}',
+                'Content-Type': 'application/json'
+            }
+
+            payload = {
+                'model': grok_model,
+                'messages': [{'role': 'user', 'content': prompt}],
+                'max_tokens': 500,
+                'temperature': 0.7
+            }
+
+            async with session.post(grok_api_url, json=payload, headers=headers) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    content = result['choices'][0]['message']['content'].strip()
+
+                    # Clean JSON response
+                    if content.startswith('```json'):
+                        content = content[7:]
+                    if content.endswith('```'):
+                        content = content[:-3]
+                    content = content.strip()
+
+                    trends = json.loads(content)
+                    logger.info(f"✅ Got {len(trends)} trends from Grok for {industry}")
+                    return trends[:10]  # Limit to top 10
+                else:
+                    logger.error(f"Grok API error: {response.status} - {await response.text()}")
+                    return [
+                        "industry_news", "customer_stories", "behind_scenes",
+                        "tips_and_tricks", "product_updates", "community_engagement"
+                    ]
+
+    except Exception as e:
+        logger.error(f"Failed to get trends from Grok: {e}")
+        return [
+            "industry_news", "customer_stories", "behind_scenes",
+            "tips_and_tricks", "product_updates", "community_engagement"
+        ]
+
+
+async def get_important_dates_from_grok(industry: str, month: str, year: str) -> List[Dict]:
+    """Get important dates and events from Grok API for calendar planning"""
+    if not grok_api_key:
+        logger.warning("Grok API key not available, using fallback dates")
+        return []
+
+    try:
+        prompt = f"""You are a calendar planning expert. What are the important dates, holidays, and industry events for {industry} industry in {month} {year}?
+
+        Include:
+        - Major holidays
+        - Industry conferences or events
+        - Product launch seasons
+        - Awareness months/campaigns
+        - Seasonal shopping periods
+        - Industry-specific dates
+
+        Return ONLY a JSON array of objects with this format:
+        [
+            {{
+                "date": "YYYY-MM-DD",
+                "event": "Event Name",
+                "type": "holiday|conference|seasonal|industry",
+                "description": "Brief description"
+            }}
+        ]
+
+        Only include events that would be relevant for content planning."""
+
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                'Authorization': f'Bearer {grok_api_key}',
+                'Content-Type': 'application/json'
+            }
+
+            payload = {
+                'model': grok_model,
+                'messages': [{'role': 'user', 'content': prompt}],
+                'max_tokens': 800,
+                'temperature': 0.6
+            }
+
+            async with session.post(grok_api_url, json=payload, headers=headers) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    content = result['choices'][0]['message']['content'].strip()
+
+                    # Clean JSON response
+                    if content.startswith('```json'):
+                        content = content[7:]
+                    if content.endswith('```'):
+                        content = content[:-3]
+                    content = content.strip()
+
+                    important_dates = json.loads(content)
+                    logger.info(f"✅ Got {len(important_dates)} important dates from Grok for {month} {year}")
+                    return important_dates
+                else:
+                    logger.error(f"Grok API error: {response.status} - {await response.text()}")
+                    return []
+
+    except Exception as e:
+        logger.error(f"Failed to get important dates from Grok: {e}")
+        return []
 
 def construct_create_calendar_payload(state) -> Any:
     """Construct payload for create calendar task"""
@@ -586,8 +722,13 @@ def generate_calendar_entries_with_llm(platform: str, posting_dates: List[date],
     platform_config = PLATFORM_CONFIGS.get(platform, PLATFORM_CONFIGS['instagram'])
     platform_mappings = RL_AGENT_MAPPINGS.get(platform, RL_AGENT_MAPPINGS['instagram'])
 
-    # Get current trends (simplified - in real implementation, use get_trends_from_grok)
-    current_month = datetime.now().strftime("%B %Y")
+    # Get current trends and important dates from Grok
+    industry = business_context.get('industry', 'general')
+    current_month = datetime.now().strftime("%B")
+    current_year = datetime.now().year
+
+    grok_trends = asyncio.run(get_trends_from_grok(industry, current_month, str(current_year)))
+    important_dates = asyncio.run(get_important_dates_from_grok(industry, current_month, str(current_year)))
 
     # Extract all possible RL agent values for this platform
     all_hook_types = set()
@@ -613,8 +754,8 @@ def generate_calendar_entries_with_llm(platform: str, posting_dates: List[date],
     text_in_images_list = sorted(list(all_text_in_images))
     visual_styles_list = sorted(list(all_visual_styles))
 
-    # Content themes from RL agent perspective
-    content_themes = [
+    # Content themes from RL agent perspective + Grok trends
+    base_themes = [
         "educational", "promotional", "engagement", "entertainment",
         "behind_scenes", "testimonial", "announcement", "brand_story",
         "user_generated", "meme_humor", "facts_did_you_know", "event_highlight",
@@ -622,7 +763,10 @@ def generate_calendar_entries_with_llm(platform: str, posting_dates: List[date],
         "call_to_action"
     ]
 
-    prompt = f"""You are a social media strategist creating a content calendar for {current_month}.
+    # Combine base themes with Grok trends
+    content_themes = base_themes + grok_trends
+
+    prompt = f"""You are a social media strategist creating a content calendar for {current_month} {current_year}.
 
 BUSINESS CONTEXT:
 - Business: {business_context.get('business_name', 'Business')}
@@ -632,6 +776,10 @@ BUSINESS CONTEXT:
 
 PLATFORM: {platform.upper()}
 CONTENT TYPES AVAILABLE: {', '.join(platform_config['content_types'])}
+
+CURRENT TRENDS FROM GROK: {', '.join(grok_trends)}
+
+IMPORTANT DATES/EVENTS: {json.dumps(important_dates) if important_dates else 'None identified'}
 
 RL AGENT VALUES FOR {platform.upper()}:
 - hook_type: {', '.join(hook_types_list)}
@@ -649,6 +797,8 @@ CALENDAR REQUIREMENTS:
 - Create {len(posting_dates)} unique content entries
 - Each entry must have fresh, original topics not in the existing topics list
 - Mix content types appropriately for the platform
+- Incorporate current trends from Grok where relevant
+- Consider important dates/events for timely content
 - Use RL agent values that are optimal for each content type and platform
 - Include trending topics and formats for {platform}
 - Topics should be engaging and aligned with business goals

@@ -24,7 +24,7 @@ export const leadsAPI = {
    * @param {Object} params - Query parameters
    * @param {string} params.status - Filter by status (new, contacted, responded, qualified, converted, lost)
    * @param {string} params.source_platform - Filter by platform (facebook, instagram)
-   * @param {number} params.limit - Number of leads to return (default: 50, max: 200)
+   * @param {number} params.limit - Number of leads to return (default: 50, max: 500)
    * @param {number} params.offset - Offset for pagination (default: 0)
    * @returns {Promise} API response with leads array
    */

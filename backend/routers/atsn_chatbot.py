@@ -391,7 +391,6 @@ async def get_atsn_conversations(
                     "clarification_options": msg.get("clarification_options"),
                     "content_items": msg.get("content_items"),
                     "lead_items": msg.get("lead_items"),
-                    "calendar_entries": msg.get("calendar_entries")
                 }
                 formatted_messages.append(formatted_msg)
 
@@ -500,7 +499,6 @@ async def incremental_save_conversation(
                 "clarification_options": msg.get("clarification_options"),
                 "content_items": msg.get("content_items"),
                 "lead_items": msg.get("lead_items"),
-                "calendar_entries": msg.get("calendar_entries")
             }
             messages_to_insert.append(message_data)
 
@@ -526,22 +524,128 @@ async def save_complete_conversation(
     conversation_data: dict,
     current_user=Depends(get_current_user)
 ):
-    """Save complete conversation when intent is fully completed - DISABLED"""
+    """Save complete conversation when intent is fully completed"""
     try:
         user_id = current_user.id
         session_id = conversation_data.get("session_id")
         messages = conversation_data.get("messages", [])
 
-        logger.info(f"Conversation saving DISABLED - skipping save for user {user_id}, session {session_id}")
+        if not session_id or not isinstance(messages, list):
+            raise HTTPException(status_code=400, detail="Invalid conversation data")
 
-        # Return success without doing anything
+        logger.info(f"Saving complete conversation with {len(messages)} messages for user {user_id}, session {session_id}")
+
+        # Check if conversation already exists
+        existing_conv = supabase_client.table("atsn_conversations").select("*").eq("session_id", session_id).eq("user_id", user_id).execute()
+
+        if existing_conv.data and len(existing_conv.data) > 0:
+            conversation_id = existing_conv.data[0]["id"]
+            logger.info(f"Updating existing conversation {conversation_id}")
+        else:
+            # Create new conversation
+            today = datetime.now(timezone.utc).date()
+            conversation_data = {
+                "user_id": user_id,
+                "session_id": session_id,
+                "conversation_date": today.isoformat(),
+                "primary_agent_name": "atsn",
+                "is_active": True
+            }
+
+            new_conv = supabase_client.table("atsn_conversations").insert(conversation_data).execute()
+            conversation_id = new_conv.data[0]["id"]
+            logger.info(f"Created new conversation {conversation_id}")
+
+        # Delete any existing messages for this conversation (to avoid duplicates)
+        supabase_client.table("atsn_conversation_messages").delete().eq("conversation_id", conversation_id).execute()
+
+        # Prepare messages for insertion
+        messages_to_insert = []
+        for i, msg in enumerate(messages):
+            message_data = {
+                "conversation_id": conversation_id,
+                "user_id": user_id,
+                "message_sequence": i + 1,
+                "message_type": msg.get("sender", "user"),
+                "content": msg.get("text", ""),
+                "created_at": msg.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                "intent": msg.get("intent"),
+                "agent_name": msg.get("agent_name"),
+                "current_step": msg.get("step"),
+                "clarification_question": msg.get("clarification_question"),
+                "clarification_options": msg.get("clarification_options"),
+                "content_items": msg.get("content_items"),
+                "lead_items": msg.get("lead_items"),
+            }
+            messages_to_insert.append(message_data)
+
+        # Batch insert all messages
+        supabase_client.table("atsn_conversation_messages").insert(messages_to_insert).execute()
+
+        logger.info(f"Successfully saved complete conversation with {len(messages_to_insert)} messages to conversation {conversation_id}")
+
         return {
             "status": "success",
-            "conversation_id": None,
-            "messages_saved": 0,
-            "note": "Conversation saving is disabled"
+            "conversation_id": conversation_id,
+            "messages_saved": len(messages_to_insert)
         }
 
     except Exception as e:
-        logger.error(f"Error in disabled save_complete_conversation: {str(e)}", exc_info=True)
+        logger.error(f"Error saving complete conversation: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to save conversation")
+
+
+@router.post("/create-content")
+async def create_content(
+    payload: dict,
+    current_user=Depends(get_current_user)
+):
+    """
+    Create content from form data and return as chat response
+    """
+    try:
+        user_id = current_user.id
+        logger.info(f"Content creation request from user {user_id}")
+
+        # Get the user's ATSN agent
+        agent = get_user_agent(user_id)
+
+        # Set up the payload for content creation
+        agent.state.payload = payload
+        agent.state.payload_complete = True
+        agent.state.current_step = "action_execution"
+        agent.state.user_query = f"Create content with specifications: {payload.get('content_idea', 'No description provided')}"
+
+        # Import and call the content creation handler
+        from agents.create_content import handle_create_content
+        result = await handle_create_content(agent.state)
+
+        # Format the response as if it came from the chatbot
+        if hasattr(result, 'error') and result.error:
+            response_message = f"❌ Error creating content: {result.error}"
+        else:
+            response_message = getattr(result, 'result', 'Content created successfully!')
+
+        # Create a chat response
+        chat_response = ChatResponse(
+            message=response_message,
+            agent_name="chase",
+            timestamp=datetime.now().isoformat(),
+            requires_action=False,
+            clarification_question=None,
+            clarification_options=None,
+            data={
+                "content_created": True,
+                "content_id": getattr(result, 'content_id', None)
+            }
+        )
+
+        logger.info(f"Content creation completed for user {user_id}")
+        return chat_response
+
+    except Exception as e:
+        logger.error(f"Error in content creation: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create content: {str(e)}"
+        )

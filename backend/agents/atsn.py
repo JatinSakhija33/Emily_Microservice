@@ -2167,6 +2167,7 @@ INTENT_MAP = {
     "publish_content": PublishContentPayload,
     "schedule_content": ScheduleContentPayload,
     "create_calendar": CreateCalendarPayload,
+    "create_content_from_calendar": None,  # No specific payload class needed, handled in functions
     "create_leads": CreateLeadPayload,
     "view_leads": ViewLeadsPayload,
     "edit_leads": EditLeadsPayload,
@@ -2202,13 +2203,14 @@ You are an intent change detector. Analyze if the user has changed their intent.
 Current Intent: {state.intent}
 Full Conversation: {state.user_query}
 
-CORE INTENTS: greeting, general_talks, create_content, edit_content, delete_content, view_content, publish_content, schedule_content, create_leads, view_leads, edit_leads, delete_leads, follow_up_leads, view_insights, view_analytics
+CORE INTENTS: greeting, general_talks, create_content, create_content_from_calendar, edit_content, delete_content, view_content, publish_content, schedule_content, create_leads, view_leads, edit_leads, delete_leads, follow_up_leads, view_insights, view_analytics
 
 TASK: Determine if the user's LATEST message indicates a change in intent.
 
 Return ONLY ONE of these exact formats:
 "same_intent"
 "intent_changed: create_content"
+"intent_changed: create_content_from_calendar"
 "intent_changed: edit_content"
 "intent_changed: delete_content"
 "intent_changed: view_content"
@@ -2231,6 +2233,7 @@ EXAMPLES:
 - User says "Nevermind, delete that post instead" → intent_changed: delete_content
 - User says "How are my analytics?" → intent_changed: view_analytics
 - User says "Schedule this for tomorrow" → intent_changed: schedule_content
+- User says "Create content from my calendar" → intent_changed: create_content_from_calendar
 """
 
     try:
@@ -2259,7 +2262,7 @@ EXAMPLES:
                 state.previous_intent = old_intent
 
                 # Determine change type
-                content_intents = ['create_content', 'edit_content', 'delete_content', 'view_content', 'publish_content', 'schedule_content', 'create_calendar']
+                content_intents = ['create_content', 'edit_content', 'delete_content', 'view_content', 'publish_content', 'schedule_content', 'create_calendar', 'create_content_from_calendar']
                 lead_intents = ['create_leads', 'view_leads', 'edit_leads', 'delete_leads', 'follow_up_leads']
                 analytics_intents = ['view_insights', 'view_analytics']
 
@@ -2319,7 +2322,15 @@ EXAMPLES:
 
 def classify_intent(state: AgentState) -> AgentState:
     """Classify user intent using Gemini"""
-    
+
+    print(f"🔍 DEBUG classify_intent: intent={state.intent}, current_step={state.current_step}, user_query='{state.user_query}', payload_complete={state.payload_complete}")
+
+    # If payload is complete and we're at action_execution step, skip classification
+    # This handles cases like media upload where we've already set everything up
+    if state.current_step == "action_execution" and state.payload_complete and state.intent:
+        print(f"✅ Skipping intent classification - already at action_execution with complete payload")
+        return state
+
     # If intent is already set and we're continuing from a clarification, preserve it
     # This prevents re-classification when user responds to clarification questions
     if state.intent and state.current_step == "payload_construction":
@@ -2328,11 +2339,13 @@ def classify_intent(state: AgentState) -> AgentState:
     
     # Check for special upload message that should preserve existing intent
     user_query_lower = state.user_query.lower().strip()
+    print(f"🔍 DEBUG: Checking for media upload, user_query_lower='{user_query_lower}'")
     if user_query_lower == "[media_upload]":
-        # This is an upload completion - preserve existing intent and continue
+        # This is an upload completion - preserve existing intent and continue payload construction
         if state.intent:
-            print(f" Media upload detected, preserving intent: {state.intent}")
-            state.current_step = "payload_construction"
+            print(f"📸 DEBUG: Media upload detected, preserving intent: {state.intent}, current_step: {state.current_step}")
+            # Media upload was processed in process_query, just preserve intent and continue
+            print(f"📸 DEBUG: Keeping current state after media upload")
             return state
 
     # Check for greetings first (simple pattern matching)
@@ -2350,24 +2363,26 @@ def classify_intent(state: AgentState) -> AgentState:
 Available intents:
 1. greeting - User is greeting (hi, hello, good morning, etc.)
 2. create_content - Creating new content (posts, videos, emails, messages) - SINGLE post
-3. generate_weekly_content - Generating weekly/monthly content calendar or bulk content (multiple posts, content strategy, weekly planning)
-4. edit_content - Editing existing content
-5. delete_content - Deleting content
-6. view_content - Viewing/listing content
-7. publish_content - Publishing content to platforms
-8. schedule_content - Scheduling content for future publishing
-9. create_calendar - Creating a social media content calendar for a month/platform
-10. create_leads - Creating new leads
-11. view_leads - Viewing/listing leads
-12. edit_leads - Editing existing leads
-13. delete_leads - Deleting leads
-14. follow_up_leads - Following up with leads
-15. view_insights - Viewing insights and metrics
-16. view_analytics - Viewing analytics data
-17. general_talks - General conversation not related to the above tasks
+3. create_content_from_calendar - Creating content from existing calendar entries
+4. generate_weekly_content - Generating weekly/monthly content calendar or bulk content (multiple posts, content strategy, weekly planning)
+5. edit_content - Editing existing content
+6. delete_content - Deleting content
+7. view_content - Viewing/listing content
+8. publish_content - Publishing content to platforms
+9. schedule_content - Scheduling content for future publishing
+10. create_calendar - Creating a social media content calendar for a month/platform
+11. create_leads - Creating new leads
+12. view_leads - Viewing/listing leads
+13. edit_leads - Editing existing leads
+14. delete_leads - Deleting leads
+15. follow_up_leads - Following up with leads
+16. view_insights - Viewing insights and metrics
+17. view_analytics - Viewing analytics data
+18. general_talks - General conversation not related to the above tasks
 
 IMPORTANT: If user asks for "content calendar", "social media calendar", "monthly calendar", "calendar for this month", or similar calendar creation requests, return "create_calendar".
 If user asks for "weekly content", "bulk content", "generate multiple posts", "content strategy", "weekly planning", or similar bulk/weekly generation requests, return "generate_weekly_content".
+If user asks for "create content from calendar", "make content from calendar", "generate content from calendar", "convert calendar to content", or similar requests to create content from existing calendar entries, return "create_content_from_calendar".
 For single post creation, return "create_content".
 
 User query: {state.user_query}
@@ -2462,7 +2477,7 @@ If the query doesn't match any specific task, return "general_talks"."""
             state.current_step = "end"
             # Ensure result is never None
             if not state.result:
-                state.result = "How can I help you today?"
+                state.result = "Hello! How can I help you today?"
         # For intents that don't need payload, skip payload construction
         elif intent == "general_talks":
             state.current_step = "action_execution"
@@ -2492,6 +2507,13 @@ from .create_content import (
     construct_create_content_payload,
     complete_create_content_payload,
     handle_create_content
+)
+
+# Import create_content_from_calendar functions from separate module
+from .create_content_from_calendar import (
+    construct_create_content_from_calendar_payload,
+    complete_create_content_from_calendar_payload,
+    handle_create_content_from_calendar
 )
 
 # Import view_content functions from separate module
@@ -4547,6 +4569,7 @@ def complete_payload(state: AgentState) -> AgentState:
         "publish_content": complete_publish_content_payload,
         "schedule_content": complete_schedule_content_payload,
         "create_calendar": complete_create_calendar_payload,
+        "create_content_from_calendar": complete_create_content_from_calendar_payload,
         "create_leads": complete_create_leads_payload,
         "view_leads": complete_view_leads_payload,
         "edit_leads": complete_edit_leads_payload,
@@ -4584,18 +4607,16 @@ def handle_greeting(state: AgentState) -> AgentState:
         except Exception as e:
             logger.warning(f"Could not fetch profile for greeting: {e}")
     
-    # Generate personalized response with LLM (no greeting at start)
-    prompt = f"""Generate a brief, helpful response (under 40 words) for {user_name} who runs {business_type}.
+    # Generate personalized greeting with LLM
+    prompt = f"""Generate a warm, brief greeting (under 40 words) for {user_name} who runs {business_type}.
 
 Include:
-1. ONE quick social media tip/trending topic for their business type
-2. Ask what they'd like to work on
+1. A friendly greeting
+2. ONE quick social media tip/trending topic for their business type
+3. Ask what they'd like to work on
 
-CRITICAL RULES:
-- DO NOT start with ANY greetings like "Hello", "Hi", "Hey there", "Good morning", etc.
-- Start directly with the helpful content
-- Keep it conversational, helpful, and under 40 words total
-- DO NOT use any emojis
+Keep it conversational, helpful, and under 40 words total.
+DO NOT use any emojis.
 
 Greeting:"""
 
@@ -4612,14 +4633,14 @@ Greeting:"""
         
     except Exception as e:
         logger.error(f"Greeting LLM failed: {str(e)}")
-        # Fallback response
-        state.result = f"""Ready to boost {business_type}?
+        # Fallback greeting
+        state.result = f"""Hello {user_name}! Ready to boost {business_type}?
 
 Tip: Video content drives 3x more engagement right now!"""
     
     # Final safeguard - ensure result is never None or empty
     if not state.result or not state.result.strip():
-        state.result = "I'm your ATSN Agent. How can I help you with content or leads today?"
+        state.result = "Hello! I'm your ATSN Agent. How can I help you with content or leads today?"
     
     return state
 
@@ -4695,6 +4716,8 @@ async def execute_action(state: AgentState) -> AgentState:
         state = handle_schedule_content(state)
     elif intent == "create_calendar":
         state = handle_create_calendar(state)
+    elif intent == "create_content_from_calendar":
+        state = await handle_create_content_from_calendar(state)
     elif intent == "create_leads":
         state = handle_create_leads(state)
     elif intent == "view_leads":
@@ -5603,6 +5626,12 @@ def route_to_constructor(state: AgentState) -> str:
     if state.error:
         return "end"
     
+    # If payload is already complete and we're at action_execution, skip to execute_action
+    # This handles cases like media upload where process_query has already prepared everything
+    if state.current_step == "action_execution" and state.payload_complete:
+        print(f"🚀 Routing directly to execute_action (payload already complete)")
+        return "execute_action"
+    
     # Greeting goes directly to end
     if state.intent == "greeting":
         return "end"
@@ -5619,6 +5648,7 @@ def route_to_constructor(state: AgentState) -> str:
         "publish_content": "construct_publish_content",
         "schedule_content": "construct_schedule_content",
         "create_calendar": "construct_create_calendar",
+        "create_content_from_calendar": "construct_create_content_from_calendar",
         "create_leads": "construct_create_leads",
         "view_leads": "construct_view_leads",
         "edit_leads": "construct_edit_leads",
@@ -5668,6 +5698,7 @@ def build_graph():
     workflow.add_node("construct_publish_content", construct_publish_content_payload)
     workflow.add_node("construct_schedule_content", construct_schedule_content_payload)
     workflow.add_node("construct_create_calendar", construct_create_calendar_payload)
+    workflow.add_node("construct_create_content_from_calendar", construct_create_content_from_calendar_payload)
     workflow.add_node("construct_create_leads", construct_create_leads_payload)
     workflow.add_node("construct_view_leads", construct_view_leads_payload)
     workflow.add_node("construct_edit_leads", construct_edit_leads_payload)
@@ -5696,6 +5727,7 @@ def build_graph():
             "construct_publish_content": "construct_publish_content",
             "construct_schedule_content": "construct_schedule_content",
             "construct_create_calendar": "construct_create_calendar",
+            "construct_create_content_from_calendar": "construct_create_content_from_calendar",
             "construct_create_leads": "construct_create_leads",
             "construct_view_leads": "construct_view_leads",
             "construct_edit_leads": "construct_edit_leads",
@@ -5711,7 +5743,7 @@ def build_graph():
     for constructor_name in [
         "construct_create_content", "construct_edit_content", "construct_delete_content",
         "construct_view_content", "construct_publish_content", "construct_schedule_content",
-        "construct_create_calendar",
+        "construct_create_calendar", "construct_create_content_from_calendar",
         "construct_create_leads", "construct_view_leads", "construct_edit_leads",
         "construct_delete_leads", "construct_follow_up_leads", "construct_view_insights",
         "construct_view_analytics"
@@ -5831,45 +5863,30 @@ class ATSNAgent:
             self.state.payload['media_file'] = media_urls[0]  # Use first URL
             logger.info(f"Media URLs set in payload: {media_urls}")
 
-        # No special handling for media uploads - let them go through normal payload construction
+        # Special handling for waiting_for_media_upload step
+        print(f"📤 DEBUG: Media processing - current_step: {self.state.current_step}, media_file: {media_file}, media_urls: {media_urls}")
+        if self.state.current_step == "waiting_for_media_upload" and (media_file or (media_urls and len(media_urls) > 0)):
+            logger.info(f"Processing media upload for waiting_for_media_upload step. media_file: {media_file}, media_urls: {media_urls}")
 
-            # Return formatted response for confirmation
-            clarification_options = []
-            if self.state.waiting_for_user and hasattr(self.state, 'clarification_options'):
-                clarification_options = getattr(self.state, 'clarification_options', [])
+            # Set media_url from the uploaded file/URL
+            if media_file:
+                self.state.payload['media_url'] = media_file
+                self.state.payload['media_file'] = media_file
+            elif media_urls and len(media_urls) > 0:
+                self.state.payload['media_url'] = media_urls[0]
+                self.state.payload['media_file'] = media_urls[0]
 
-            current_step = self.state.current_step
-            if self.state.waiting_for_upload:
-                current_step = "waiting_for_upload"
+            print(f"📤 DEBUG: Set media in payload - media_url: {self.state.payload.get('media_url')}, current_step before: {self.state.current_step}")
+            logger.info(f"Set media in payload - media_url: {self.state.payload.get('media_url')}, media_file: {self.state.payload.get('media_file')}")
 
-            return {
-                "intent": self.state.intent,
-                "payload": self.state.payload,
-                "payload_complete": self.state.payload_complete,
-                "waiting_for_user": self.state.waiting_for_user,
-                "waiting_for_upload": self.state.waiting_for_upload,
-                "upload_type": self.state.upload_type,
-                "clarification_question": self.state.clarification_question,
-                "clarification_options": clarification_options,
-                "result": self.state.result,
-                "error": self.state.error,
-                "current_step": current_step,
-                "content_id": self.state.content_id,
-                "content_ids": getattr(self.state, 'content_ids', None),
-                "lead_id": self.state.lead_id,
-                "content_items": self.state.content_items,
-                "lead_items": self.state.lead_items,
-                "needs_connection": getattr(self.state, 'needs_connection', None),
-                "connection_platform": getattr(self.state, 'connection_platform', None)
-            }
-
-        # Special case: If media was uploaded and we have a pending create_content intent, continue with content creation
-        if (self.state.payload.get('media_file') and
-            self.state.intent == 'create_content' and
-            getattr(self.state, 'waiting_for_upload', False)):
-            logger.info("Media uploaded for pending create_content - resetting upload flag, graph will continue to execute_action")
-            # Reset upload flag - graph will continue to execute_action where handle_create_content will run
+            # IMPORTANT: Keep intent and payload intact, mark as complete to proceed to action
+            # This ensures the graph doesn't reclassify the intent
+            self.state.payload_complete = True
+            self.state.current_step = "action_execution"
+            self.state.waiting_for_user = False
             self.state.waiting_for_upload = False
+            print(f"📤 DEBUG: Media uploaded, payload complete, proceeding to action_execution")
+            logger.info(f"Media uploaded for static post, payload complete, proceeding to action. Media URL: {self.state.payload.get('media_url')}")
 
         # Handle content selection from temp_content_options (for scheduling)
         if (hasattr(self.state, 'temp_content_options') and
@@ -5897,94 +5914,6 @@ class ATSNAgent:
                     self.state.payload['content_id'] = user_query.strip()
                     logger.info(f"User provided direct content ID: {user_query.strip()}")
                     self.state.temp_content_options = None
-
-        # Handle confirmation response for media upload content creation
-        if (self.state.current_step == "waiting_for_confirmation" and
-            self.state.intent == 'create_content' and
-            self.state.payload.get('media') == 'Upload'):
-
-            user_response = user_query.strip().lower()
-            if user_response in ['yes', 'y', 'sure', 'okay', 'ok', 'go ahead']:
-                logger.info("User confirmed content creation from uploaded media")
-                # Mark payload as complete to proceed with content creation
-                self.state.payload_complete = True
-                self.state.waiting_for_user = False
-                self.state.current_step = "processing"
-                self.state.clarification_question = ""
-                self.state.clarification_options = []
-                self.state.result = "Great! I'm creating engaging content using your uploaded image..."
-            elif user_response in ['no', 'n', 'cancel', 'stop', 'nevermind']:
-                logger.info("User cancelled content creation from uploaded media")
-                # Reset to general state
-                self.state.intent = 'general_talks'
-                self.state.payload_complete = False
-                self.state.waiting_for_user = False
-                self.state.current_step = "end"
-                self.state.clarification_question = ""
-                self.state.clarification_options = []
-                self.state.result = "No problem! Your uploaded image is saved. Let me know if you'd like to do something else with it."
-                # Return formatted response for invalid response
-                clarification_options = []
-                if self.state.waiting_for_user and hasattr(self.state, 'clarification_options'):
-                    clarification_options = getattr(self.state, 'clarification_options', [])
-
-                current_step = self.state.current_step
-                if self.state.waiting_for_upload:
-                    current_step = "waiting_for_upload"
-
-                return {
-                    "intent": self.state.intent,
-                    "payload": self.state.payload,
-                    "payload_complete": self.state.payload_complete,
-                    "waiting_for_user": self.state.waiting_for_user,
-                    "waiting_for_upload": self.state.waiting_for_upload,
-                    "upload_type": self.state.upload_type,
-                    "clarification_question": self.state.clarification_question,
-                    "clarification_options": clarification_options,
-                    "result": self.state.result,
-                    "error": self.state.error,
-                    "current_step": current_step,
-                    "content_id": self.state.content_id,
-                    "content_ids": getattr(self.state, 'content_ids', None),
-                    "lead_id": self.state.lead_id,
-                    "content_items": self.state.content_items,
-                    "lead_items": self.state.lead_items,
-                    "needs_connection": getattr(self.state, 'needs_connection', None),
-                    "connection_platform": getattr(self.state, 'connection_platform', None)
-                }
-            else:
-                # Invalid response, ask again
-                logger.info("Invalid confirmation response, asking again")
-                self.state.result = "Please respond with 'yes' to create content or 'no' to cancel."
-                # Return formatted response for invalid response
-                clarification_options = []
-                if self.state.waiting_for_user and hasattr(self.state, 'clarification_options'):
-                    clarification_options = getattr(self.state, 'clarification_options', [])
-
-                current_step = self.state.current_step
-                if self.state.waiting_for_upload:
-                    current_step = "waiting_for_upload"
-
-                return {
-                    "intent": self.state.intent,
-                    "payload": self.state.payload,
-                    "payload_complete": self.state.payload_complete,
-                    "waiting_for_user": self.state.waiting_for_user,
-                    "waiting_for_upload": self.state.waiting_for_upload,
-                    "upload_type": self.state.upload_type,
-                    "clarification_question": self.state.clarification_question,
-                    "clarification_options": clarification_options,
-                    "result": self.state.result,
-                    "error": self.state.error,
-                    "current_step": current_step,
-                    "content_id": self.state.content_id,
-                    "content_ids": getattr(self.state, 'content_ids', None),
-                    "lead_id": self.state.lead_id,
-                    "content_items": self.state.content_items,
-                    "lead_items": self.state.lead_items,
-                    "needs_connection": getattr(self.state, 'needs_connection', None),
-                    "connection_platform": getattr(self.state, 'connection_platform', None)
-                }
 
         # Run the graph
         result = await self.graph.ainvoke(self.state)

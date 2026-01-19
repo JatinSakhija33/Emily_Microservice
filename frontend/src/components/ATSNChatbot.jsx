@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationContext'
 import { supabase } from '../lib/supabase'
-import { Send, ArrowRight, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone, Heart, X, Download } from 'lucide-react'
+import { Send, ArrowRight, User, Bot, RefreshCw, MessageCircle, Clock, AlertCircle, Trash2, Square, CheckSquare, Edit, Share, Calendar, Save, Copy, Upload, Video, Mail, Phone, Heart, X, Download, Minimize2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import ContentCard from './ContentCard'
@@ -65,7 +65,7 @@ const getApiBaseUrl = () => {
 }
 const API_BASE_URL = getApiBaseUrl().replace(/\/$/, '')
 
-const ATSNChatbot = ({ externalConversations = null }) => {
+const ATSNChatbot = ({ externalConversations = null, onMinimize = null }) => {
   const { user } = useAuth()
   const { showError, showSuccess } = useNotifications()
   const [messages, setMessages] = useState([])
@@ -135,7 +135,6 @@ const ATSNChatbot = ({ externalConversations = null }) => {
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
   const [isDarkMode, setIsDarkMode] = useState(getDarkModePreference)
   const [likedMessages, setLikedMessages] = useState(new Set())
-  const [agentProfiles, setAgentProfiles] = useState({}) // Agent profiles with likes and tasks data
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const lastExternalConversationsRef = useRef(null)
@@ -347,8 +346,12 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                 console.log('Before cleaning loaded message:', cleanText)
                 // Remove trailing )} patterns (with or without whitespace)
                 cleanText = cleanText.replace(/\s*\)\s*\}\s*$/g, '').trim();
-                // Remove any standalone )} patterns
+                // Remove any standalone )} patterns throughout the text
                 cleanText = cleanText.replace(/\s*\)\s*\}\s*/g, '');
+                // Remove other common stray patterns: (, {, [, ], *, etc. at start/end
+                cleanText = cleanText.replace(/^[\(\[\{\*\)\]\}\s]*/g, '').replace(/[\(\[\{\*\)\]\}\s]*$/g, '').trim();
+                // Remove multiple consecutive braces/brackets
+                cleanText = cleanText.replace(/[\(\)\{\}\[\]\*]{2,}/g, '').trim();
                 // Remove leading ( and whitespace
                 cleanText = cleanText.replace(/^[(\s]*/g, '').trim();
                 console.log('After cleaning loaded message:', cleanText)
@@ -508,33 +511,6 @@ const ATSNChatbot = ({ externalConversations = null }) => {
     }
   }, [messages.length])
 
-  // Fetch agent profiles data
-  useEffect(() => {
-    const fetchAgentProfiles = async () => {
-      try {
-        const token = await getAuthToken()
-        if (!token) return
-
-        const response = await fetch('/api/profile/agents/profiles', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-
-        if (response.ok) {
-          const profiles = await response.json()
-          setAgentProfiles(profiles)
-        } else {
-          console.error('Failed to fetch agent profiles:', response.statusText)
-        }
-      } catch (error) {
-        console.error('Error fetching agent profiles:', error)
-      }
-    }
-
-    fetchAgentProfiles()
-  }, [])
 
   // Load today's conversations (similar to Chatbot.jsx)
   const loadTodayConversations = async () => {
@@ -928,10 +904,19 @@ const ATSNChatbot = ({ externalConversations = null }) => {
       console.log('Before cleaning:', cleanResponse)
       // Remove trailing )} patterns (with or without whitespace)
       cleanResponse = cleanResponse.replace(/\s*\)\s*\}\s*$/g, '').trim();
-      // Remove any standalone )} patterns
+      // Remove any standalone )} patterns throughout the text
       cleanResponse = cleanResponse.replace(/\s*\)\s*\}\s*/g, '');
-      // Remove leading ( and whitespace
-      cleanResponse = cleanResponse.replace(/^[(\s]*/g, '').trim();
+      // Remove other common stray patterns: (, {, [, ], *, etc. at start/end
+      cleanResponse = cleanResponse.replace(/^[\(\[\{\*\)\]\}\s]*/g, '').replace(/[\(\[\{\*\)\]\}\s]*$/g, '').trim();
+      // Remove multiple consecutive braces/brackets
+      cleanResponse = cleanResponse.replace(/[\(\)\{\}\[\]\*]{2,}/g, '').trim();
+      // Remove standalone stray characters on their own lines
+      cleanResponse = cleanResponse.split('\n').map(line => {
+        const trimmed = line.trim();
+        // Skip lines that are only stray characters
+        if (/^[\(\)\{\}\[\]\*\s]+$/.test(trimmed)) return '';
+        return line;
+      }).filter(line => line !== '' || line.match(/^\s*$/)).join('\n').trim();
       console.log('After cleaning:', cleanResponse)
 
       // Create bot message object
@@ -965,9 +950,6 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         saveMessagesToCache(newMessages)
         return newMessages
       })
-
-      // Update conversation history with bot response
-      setConversationHistory(prev => [...prev, botMessageObj.text])
 
       // Cache the bot message
       setMessageCache(prev => {
@@ -1976,11 +1958,18 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       const data = await response.json()
 
+      // Clean the response text before adding to messages
+      let cleanText = data.response || '';
+      cleanText = cleanText.replace(/\s*\)\s*\}\s*$/g, '').trim();
+      cleanText = cleanText.replace(/\s*\)\s*\}\s*/g, '');
+      cleanText = cleanText.replace(/^[\(\[\{\*\)\]\}\s]*/g, '').replace(/[\(\[\{\*\)\]\}\s]*$/g, '').trim();
+      cleanText = cleanText.replace(/[\(\)\{\}\[\]\*]{2,}/g, '').trim();
+
       // Add bot response
       setMessages(prev => [...prev, {
         id: Date.now(),
         sender: 'bot',
-        text: data.response,
+        text: cleanText,
         timestamp: new Date().toISOString(),
         intent: data.intent,
         step: data.current_step,
@@ -2108,11 +2097,18 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       const data = await response.json()
 
+      // Clean the response text before adding to messages
+      let cleanText = data.response || '';
+      cleanText = cleanText.replace(/\s*\)\s*\}\s*$/g, '').trim();
+      cleanText = cleanText.replace(/\s*\)\s*\}\s*/g, '');
+      cleanText = cleanText.replace(/^[\(\[\{\*\)\]\}\s]*/g, '').replace(/[\(\[\{\*\)\]\}\s]*$/g, '').trim();
+      cleanText = cleanText.replace(/[\(\)\{\}\[\]\*]{2,}/g, '').trim();
+
       // Add bot response
       setMessages(prev => [...prev, {
         id: Date.now(),
         sender: 'bot',
-        text: data.response,
+        text: cleanText,
         timestamp: new Date().toISOString(),
         intent: data.intent,
         step: data.current_step,
@@ -2223,11 +2219,18 @@ const ATSNChatbot = ({ externalConversations = null }) => {
 
       const data = await response.json()
 
+      // Clean the response text before adding to messages
+      let cleanText = data.response || '';
+      cleanText = cleanText.replace(/\s*\)\s*\}\s*$/g, '').trim();
+      cleanText = cleanText.replace(/\s*\)\s*\}\s*/g, '');
+      cleanText = cleanText.replace(/^[\(\[\{\*\)\]\}\s]*/g, '').replace(/[\(\[\{\*\)\]\}\s]*$/g, '').trim();
+      cleanText = cleanText.replace(/[\(\)\{\}\[\]\*]{2,}/g, '').trim();
+
       // Add bot response
       setMessages(prev => [...prev, {
         id: Date.now(),
         sender: 'bot',
-        text: data.response,
+        text: cleanText,
         timestamp: new Date().toISOString(),
         intent: data.intent,
         step: data.current_step,
@@ -2372,6 +2375,12 @@ const ATSNChatbot = ({ externalConversations = null }) => {
           }
 
           // Send upload response
+          console.log('Sending media upload to backend:', {
+            message: messageToSend,
+            media_urls: data.urls || [],
+            isWaitingForUpload: isWaitingForUpload
+          })
+
           try {
             const chatResponse = await fetch(`${API_BASE_URL}/atsn/chat`, {
               method: 'POST',
@@ -2916,6 +2925,37 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         `
       }} />
 
+      {/* Chat Header */}
+      <div className={`flex-shrink-0 px-4 py-3 border-b ${
+        isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'
+      }`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/logo_.png" alt="ATSN AI Team" className="w-8 h-8 rounded-full object-cover" />
+            <div>
+              <h3 className={`text-sm font-normal ${
+                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+              }`}>
+                ATSN AI Team
+              </h3>
+            </div>
+          </div>
+          {onMinimize && (
+            <button
+              onClick={onMinimize}
+              className={`p-2 rounded-md transition-colors ${
+                isDarkMode
+                  ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200'
+                  : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'
+              }`}
+              title="Minimize chat"
+            >
+              <Minimize2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Schedule Modal */}
       {showScheduleModal && (
         <div
@@ -3128,10 +3168,19 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                       {/* Clean message text to remove stray characters */}
                       {(() => {
                         let displayText = message.text || '';
-                        // Remove trailing )} patterns
+                        // Remove trailing )} patterns (with or without whitespace)
                         displayText = displayText.replace(/\s*\)\s*\}\s*$/g, '').trim();
-                        // Remove any standalone )} patterns
+                        // Remove any standalone )} patterns throughout the text
                         displayText = displayText.replace(/\s*\)\s*\}\s*/g, '');
+                        // Remove other common stray patterns: (, {, [, ], *, etc. at start/end
+                        displayText = displayText.replace(/^[\(\[\{\*\)\]\}\s]*/g, '').replace(/[\(\[\{\*\)\]\}\s]*$/g, '').trim();
+                        // Remove multiple consecutive braces/brackets
+                        displayText = displayText.replace(/[\(\)\{\}\[\]\*]{2,}/g, '').trim();
+
+                        // Skip rendering if message becomes empty or contains only stray characters
+                        if (!displayText || /^[)}\s\(\{\[\]\*]+$/.test(displayText)) {
+                          return null;
+                        }
                         
                         // Check if message contains markdown syntax
                         const hasMarkdown = displayText.includes('#') || displayText.includes('*') || displayText.includes('`') || displayText.includes('[');
@@ -4353,7 +4402,26 @@ const ATSNChatbot = ({ externalConversations = null }) => {
                   </div>
                 ) : (
                   <div className="relative">
-                    <p className="text-base whitespace-pre-wrap pr-16 text-left">{message.text}</p>
+                    <p className="text-base whitespace-pre-wrap pr-16 text-left">
+                      {(() => {
+                        let displayText = message.text || '';
+                        // Remove trailing )} patterns (with or without whitespace)
+                        displayText = displayText.replace(/\s*\)\s*\}\s*$/g, '').trim();
+                        // Remove any standalone )} patterns throughout the text
+                        displayText = displayText.replace(/\s*\)\s*\}\s*/g, '');
+                        // Remove other common stray patterns: (, {, [, ], *, etc. at start/end
+                        displayText = displayText.replace(/^[\(\[\{\*\)\]\}\s]*/g, '').replace(/[\(\[\{\*\)\]\}\s]*$/g, '').trim();
+                        // Remove multiple consecutive braces/brackets
+                        displayText = displayText.replace(/[\(\)\{\}\[\]\*]{2,}/g, '').trim();
+
+                        // Skip rendering if message becomes empty or contains only stray characters
+                        if (!displayText || /^[)}\s\(\{\[\]\*]+$/.test(displayText)) {
+                          return null;
+                        }
+
+                        return displayText;
+                      })()}
+                    </p>
                     <div className={`absolute bottom-0 right-0 text-xs ${
                       message.sender === 'user' ? 'text-white' : 'text-gray-400'
                     }`}>
@@ -5023,8 +5091,6 @@ const ATSNChatbot = ({ externalConversations = null }) => {
         isVisible={!!tooltipAgent}
         position={tooltipPosition}
         isDarkMode={isDarkMode}
-        likesCount={agentProfiles[tooltipAgent?.toLowerCase()]?.likes_count || 0}
-        tasksCount={agentProfiles[tooltipAgent?.toLowerCase()]?.tasks_completed_count || 0}
       />
     </div>
   )
