@@ -48,6 +48,8 @@ from routers import smart_search
 # from services.scheduler import start_analytics_scheduler, stop_analytics_scheduler, get_scheduler_status, trigger_analytics_collection_now
 from services.image_editor_service import image_editor_service
 from utils.daily_cache_manager import daily_cache
+from organic_campaign.router import router as organic_router
+
 
 # Load environment variables
 load_dotenv()
@@ -140,6 +142,7 @@ app.include_router(calendar_router)
 app.include_router(profile_router)
 app.include_router(document_parser.router)
 app.include_router(smart_search.router)
+app.include_router(organic_router)
 
 # Health check endpoint
 @app.get("/health")

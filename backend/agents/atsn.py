@@ -2390,9 +2390,29 @@ User query: {state.user_query}
 Return ONLY the intent name (e.g., "create_content", "generate_weekly_content", "greeting", "general_talks", etc.) without any explanation.
 If the query doesn't match any specific task, return "general_talks"."""
 
+    print(f"🔍 DEBUG: Starting intent classification. OpenAI client available: {bool(openai_client)}")
     try:
-        response = model.generate_content(prompt)
-        intent = response.text.strip().lower()
+        try:
+            print("🔍 DEBUG: Attempting Gemini generation...")
+            response = model.generate_content(prompt)
+            print(f"🔍 DEBUG: Gemini response object: {type(response)}")
+            intent = response.text.strip().lower()
+            print(f"🔍 DEBUG: Gemini generated intent: '{intent}'")
+        except Exception as gemini_e:
+            print(f"⚠️ Gemini intent classification failed with error type {type(gemini_e)}: {gemini_e}")
+            if openai_client:
+                print(f"🔄 Falling back to OpenAI for intent classification...")
+                openai_response = openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=50,
+                    temperature=0.1
+                )
+                intent = openai_response.choices[0].message.content.strip().strip('"\'').lower()
+                print(f"🔍 DEBUG: OpenAI generated intent: '{intent}'")
+            else:
+                print("❌ OpenAI client not available for fallback")
+                raise gemini_e
         
         # Validate intent
         if intent not in INTENT_MAP:
@@ -4715,7 +4735,7 @@ async def execute_action(state: AgentState) -> AgentState:
     elif intent == "schedule_content":
         state = handle_schedule_content(state)
     elif intent == "create_calendar":
-        state = handle_create_calendar(state)
+        state = await handle_create_calendar(state)
     elif intent == "create_content_from_calendar":
         state = await handle_create_content_from_calendar(state)
     elif intent == "create_leads":

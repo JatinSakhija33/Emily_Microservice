@@ -450,7 +450,7 @@ def complete_create_calendar_payload(state) -> Any:
     return state
 
 
-def handle_create_calendar(state) -> Any:
+async def handle_create_calendar(state) -> Any:
     """Generate and create social media calendar"""
 
     # Import required functions
@@ -511,7 +511,7 @@ def handle_create_calendar(state) -> Any:
         logger.info(f"📅 Calculated {len(posting_dates)} posting dates for {payload['post_frequency']} frequency")
 
         # Generate calendar entries using LLM
-        calendar_entries = generate_calendar_entries_with_llm(
+        calendar_entries = await generate_calendar_entries_with_llm(
             platform=payload['channel'],
             posting_dates=posting_dates,
             business_context=business_context,
@@ -714,7 +714,7 @@ def calculate_posting_schedule(frequency: str, start_date: date, end_date: date)
     return dates[:31]  # Limit to reasonable number
 
 
-def generate_calendar_entries_with_llm(platform: str, posting_dates: List[date],
+async def generate_calendar_entries_with_llm(platform: str, posting_dates: List[date],
                                      business_context: dict, existing_topics: List[str],
                                      user_id: str) -> List[Dict]:
     """Generate calendar entries using LLM with trend awareness and topic deduplication"""
@@ -727,8 +727,8 @@ def generate_calendar_entries_with_llm(platform: str, posting_dates: List[date],
     current_month = datetime.now().strftime("%B")
     current_year = datetime.now().year
 
-    grok_trends = asyncio.run(get_trends_from_grok(industry, current_month, str(current_year)))
-    important_dates = asyncio.run(get_important_dates_from_grok(industry, current_month, str(current_year)))
+    grok_trends = await get_trends_from_grok(industry, current_month, str(current_year))
+    important_dates = await get_important_dates_from_grok(industry, current_month, str(current_year))
 
     # Extract all possible RL agent values for this platform
     all_hook_types = set()
