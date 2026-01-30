@@ -1,0 +1,1434 @@
+"""
+Create Content Functions - Extracted from ATSN Agent
+Contains construct, complete, and handle functions for content creation.
+"""
+
+import os
+import logging
+import re
+import uuid
+import base64
+from typing import Dict, Any, List
+from datetime import datetime, timedelta
+import google.generativeai as genai
+import openai
+import httpx
+from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Load environment
+load_dotenv()
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Initialize Supabase client
+supabase_url = os.getenv('SUPABASE_URL')
+supabase_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+supabase = create_client(supabase_url, supabase_key) if supabase_url and supabase_key else None
+
+# Initialize OpenAI client
+openai_api_key = os.getenv('OPENAI_API_KEY')
+openai_client = openai.OpenAI(api_key=openai_api_key) if openai_api_key else None
+
+# Configure Gemini
+genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+
+# ==================== CONSTANTS ====================
+
+JSON_ONLY_INSTRUCTION = """
+
+CRITICAL: You MUST respond with ONLY a valid JSON object. Do NOT include any explanatory text, comments, or additional text before or after the JSON.
+Your response must start with {{ and end with }}. No other text is allowed.
+Return ONLY the JSON object, nothing else."""
+
+FIELD_CLARIFICATIONS = {
+    "create_content": {
+        "channel": {
+            "question": "Hello! Let's create some content together.\n\nWhich channel would you like to focus on?",
+            "options": [
+                {"label": "Social Media", "value": "Social Media"},
+                {"label": "Blog", "value": "Blog"}
+            ]
+        },
+        "platform": {
+            "question": "Great choice! Now, where would you like to share this content?",
+            "options": [
+                {"label": "Instagram", "value": "Instagram"},
+                {"label": "Facebook", "value": "Facebook"},
+                {"label": "LinkedIn", "value": "LinkedIn"},
+                {"label": "YouTube", "value": "YouTube"}
+            ]
+        },
+        "content_type": {
+            "question": "Perfect! What kind of content are you thinking?",
+            "options": [
+                {"label": "Static Post", "value": "static_post"},
+                {"label": "Carousel", "value": "carousel"},
+                {"label": "Short Video/Reel", "value": "short_video or reel"},
+                {"label": "Long Video", "value": "long_video"},
+                {"label": "Blog Post", "value": "blog"}
+            ]
+        },
+        "media": {
+            "question": "Awesome! Should we include some visual elements?",
+            "options": [
+                {"label": "Yes, Generate", "value": "Generate"},
+                {"label": "I will Upload", "value": "Upload"},
+                {"label": "Generate Without media", "value": "Without media"}
+            ]
+        },
+        "content_idea": {
+            "question": "Love it! Tell me more about what you have in mind. What's the main idea or topic you want to cover? (Aim for at least 10 words to give me a good sense of what you're looking for)",
+            "options": []
+        },
+        "Post_type": {
+            "question": "What kind of post are you thinking of?",
+            "options": [],  # No multiple choice options - open-ended
+            "full_options": [  # Full list for contextual LLM suggestion
+                {"label": "Educational tips", "value": "Educational tips"},
+                {"label": "Quote / motivation", "value": "Quote / motivation"},
+                {"label": "Promotional offer", "value": "Promotional offer"},
+                {"label": "Product showcase", "value": "Product showcase"},
+                {"label": "Carousel infographic", "value": "Carousel infographic"},
+                {"label": "Announcement", "value": "Announcement"},
+                {"label": "Testimonial / review", "value": "Testimonial / review"},
+                {"label": "Before–after", "value": "Before–after"},
+                {"label": "Behind-the-scenes", "value": "Behind-the-scenes"},
+                {"label": "User-generated content", "value": "User-generated content"},
+                {"label": "Brand story", "value": "Brand story"},
+                {"label": "Meme / humor", "value": "Meme / humor"},
+                {"label": "Facts / did-you-know", "value": "Facts / did-you-know"},
+                {"label": "Event highlight", "value": "Event highlight"},
+                {"label": "Countdown", "value": "Countdown"},
+                {"label": "FAQ post", "value": "FAQ post"},
+                {"label": "Comparison", "value": "Comparison"},
+                {"label": "Case study snapshot", "value": "Case study snapshot"},
+                {"label": "Milestone / achievement", "value": "Milestone / achievement"},
+                {"label": "Call-to-action post", "value": "Call-to-action post"}
+            ]
+        },
+        "Image_type": {
+            "question": "What's the visual style you have in mind for your images?",
+            "options": [],  # No multiple choice options - open-ended
+            "full_options": [  # Full list for contextual LLM suggestion
+                {"label": "Minimal & Clean with Bold Typography", "value": "Minimal & Clean with Bold Typography"},
+                {"label": "Modern Corporate / B2B Professional", "value": "Modern Corporate / B2B Professional"},
+                {"label": "Luxury Editorial (Black, White, Gold Accents)", "value": "Luxury Editorial (Black, White, Gold Accents)"},
+                {"label": "Photography-Led Lifestyle Aesthetic", "value": "Photography-Led Lifestyle Aesthetic"},
+                {"label": "Product-Focused Clean Commercial Style", "value": "Product-Focused Clean Commercial Style"},
+                {"label": "Flat Illustration with Friendly Characters", "value": "Flat Illustration with Friendly Characters"},
+                {"label": "Isometric / Explainer Illustration Style", "value": "Isometric / Explainer Illustration Style"},
+                {"label": "Playful & Youthful (Memphis / Stickers / Emojis)", "value": "Playful & Youthful (Memphis / Stickers / Emojis)"},
+                {"label": "High-Impact Color-Blocking with Loud Type", "value": "High-Impact Color-Blocking with Loud Type"},
+                {"label": "Retro / Vintage Poster Style", "value": "Retro / Vintage Poster Style"},
+                {"label": "Futuristic Tech / AI-Inspired Dark Mode", "value": "Futuristic Tech / AI-Inspired Dark Mode"},
+                {"label": "Glassmorphism / Neumorphism UI Style", "value": "Glassmorphism / Neumorphism UI Style"},
+                {"label": "Abstract Shapes & Fluid Gradient Art", "value": "Abstract Shapes & Fluid Gradient Art"},
+                {"label": "Infographic / Data-Driven Educational Layout", "value": "Infographic / Data-Driven Educational Layout"},
+                {"label": "Quote Card / Thought-Leadership Typography Post", "value": "Quote Card / Thought-Leadership Typography Post"},
+                {"label": "Meme-Style / Social-Native Engagement Post", "value": "Meme-Style / Social-Native Engagement Post"},
+                {"label": "Festive / Campaign-Based Creative", "value": "Festive / Campaign-Based Creative"},
+                {"label": "Textured Design (Paper, Grain, Handmade Feel)", "value": "Textured Design (Paper, Grain, Handmade Feel)"},
+                {"label": "Magazine / Editorial Layout with Strong Hierarchy", "value": "Magazine / Editorial Layout with Strong Hierarchy"},
+                {"label": "Experimental / Artistic Concept-Driven Design", "value": "Experimental / Artistic Concept-Driven Design"}
+            ]
+        },
+    }
+}
+
+# ==================== IMPORTED FUNCTIONS FROM ATSN ====================
+
+# These functions need to be imported from atsn.py when using this module
+# - _extract_payload
+# - get_contextual_suggestion
+# - generate_clarifying_question
+# - generate_personalized_message
+# - get_business_context_from_profile
+# - generate_image_enhancer_prompt
+# - build_brand_color_instructions
+# - build_location_context
+# - generate_carousel_image_prompts
+# - generate_carousel_images
+# - get_trends_from_grok
+# - generate_content_with_rl_agent
+# - extract_hashtags_from_caption
+
+# ==================== FUNCTIONS ====================
+
+def construct_create_content_payload(state) -> Any:
+    """Construct payload for create content task"""
+
+    # Use user_query which contains the full conversation context
+    conversation = state.user_query
+
+    prompt = f"""You are extracting information to create content. Be EXTREMELY STRICT and CONSERVATIVE in your extraction.
+
+CRITICAL PRINCIPLES:
+1. ONLY extract information that is EXPLICITLY and CLEARLY stated
+2. NEVER infer, assume, or extrapolate information
+3. If uncertain about any field, set it to null
+4. Quality over quantity - better to ask questions than make wrong assumptions
+
+EXTRACTION RULES:
+
+channel:
+- Set to "Social Media" ONLY if user explicitly mentions social media platforms (Instagram, Facebook, LinkedIn, YouTube)
+- Set to "Blog" ONLY if user explicitly mentions blogging, articles, or writing content for websites
+- Otherwise: null
+
+platform:
+- ONLY extract if user explicitly names exactly one of: "Instagram", "Facebook", "LinkedIn", "YouTube"
+- Case sensitive - must match exactly
+- If multiple platforms mentioned, set to null (ask user to choose)
+- Otherwise: null
+
+content_type:
+- ONLY extract if user explicitly uses these exact phrases:
+  * "static post" → "static_post"
+  * "carousel" → "carousel"
+  * "short video" or "reel" → "short_video or reel"
+  * "long video" → "long_video"
+  * "blog post" or "blog" → "blog"
+- Generic terms like "post", "video", "content" are NOT sufficient
+- Otherwise: null
+
+media:
+- Set to "Generate" ONLY if user explicitly says they want AI-generated images/graphics/visuals
+- Set to "Upload" ONLY if user explicitly says they will provide/upload their own images
+- Set to "without media" ONLY if user explicitly says no images or text-only
+- Otherwise: null
+
+content_idea:
+- Must be the main topic/subject explicitly stated by the user
+- Must be a complete, detailed description (minimum 10 words)
+- Must clearly explain what the content is about
+- Short phrases like "marketing tips" or "our product" are NOT sufficient
+- Count the words - if under 10, set to null
+
+CLASSIFICATION (ONLY when content_idea exists and is sufficiently detailed):
+
+Post_type:
+- Choose from: Educational tips, Quote / motivation, Promotional offer, Product showcase, Carousel infographic, Announcement, Testimonial / review, Before–after, Behind-the-scenes, User-generated content, Brand story, Meme / humor, Facts / did-you-know, Event highlight, Countdown, FAQ post, Comparison, Case study snapshot, Milestone / achievement, Call-to-action post
+- ONLY classify if the content_idea clearly matches one category
+- If unclear which category fits best, set to null
+
+Image_type:
+- Choose from: Minimal & Clean with Bold Typography, Modern Corporate / B2B Professional, Luxury Editorial (Black, White, Gold Accents), Photography-Led Lifestyle Aesthetic, Product-Focused Clean Commercial Style, Flat Illustration with Friendly Characters, Isometric / Explainer Illustration Style, Playful & Youthful (Memphis / Stickers / Emojis), High-Impact Color-Blocking with Loud Type, Retro / Vintage Poster Style, Futuristic Tech / AI-Inspired Dark Mode, Glassmorphism / Neumorphism UI Style, Abstract Shapes & Fluid Gradient Art, Infographic / Data-Driven Educational Layout, Quote Card / Thought-Leadership Typography Post, Meme-Style / Social-Native Engagement Post, Festive / Campaign-Based Creative, Textured Design (Paper, Grain, Handmade Feel), Magazine / Editorial Layout with Strong Hierarchy, Experimental / Artistic Concept-Driven Design
+- ONLY classify if the content_idea suggests a specific visual style
+- If no clear visual style is implied, set to null
+
+VALIDATION CHECKLIST:
+□ Is every field either properly extracted or null?
+□ Does content_idea have at least 10 words?
+□ Is platform an exact match from allowed values?
+□ Is content_type based on explicit user wording?
+□ Are classifications truly supported by the content_idea?
+
+If ANY doubt exists, set the uncertain field(s) to null.
+
+User conversation:
+{conversation}
+
+Return a JSON object with exactly this structure:
+{{
+    "channel": "Social Media" | "Blog" | null,
+    "platform": "Instagram" | "Facebook" | "LinkedIn" | "YouTube" | null,
+    "content_type": "static_post" | "carousel" | "short_video or reel" | "long_video" | "blog" | null,
+    "media": "Generate" | "Upload" | "without media" | null,
+    "content_idea": "string with at least 10 words" | null,
+    "Post_type": "one of the allowed post types" | null,
+    "Image_type": "one of the allowed image types" | null
+}}
+
+IMPORTANT: Return ONLY the JSON object, no additional text or explanation.
+{JSON_ONLY_INSTRUCTION}"""
+
+    # Import _extract_payload from atsn
+    from .atsn import _extract_payload
+    return _extract_payload(state, prompt)
+
+
+def complete_create_content_payload(state) -> Any:
+    """Complete create_content payload"""
+
+    print(f"🎯 DEBUG: complete_create_content_payload called")
+    print(f"🎯 DEBUG: current_step: {state.current_step}")
+    print(f"🎯 DEBUG: payload_complete: {state.payload_complete}")
+    print(f"🎯 DEBUG: full payload: {state.payload}")
+
+    # Import required functions
+    from .atsn import (
+        get_contextual_suggestion,
+        generate_clarifying_question,
+    )
+
+    # Define the clarification flow order (media last)
+    clarification_flow = ["channel", "platform", "content_type", "content_idea", "Post_type", "media"]
+
+    # Build required fields list based on current state
+    required_fields = []
+
+    # Check if all fields before media are complete
+    other_fields_complete = True
+    for field in clarification_flow[:-1]:  # All fields except media
+        if field == "Image_type":
+            # Only require Image_type if media is "Generate"
+            if state.payload.get("media") == "Generate":
+                if field not in state.payload or state.payload.get(field) is None or not state.payload.get(field):
+                    other_fields_complete = False
+                    break
+        elif field == "content_idea":
+            # Special handling for content_idea - check word count
+            content_idea = state.payload.get("content_idea", "")
+            if not content_idea or len(content_idea.split()) < 10:
+                other_fields_complete = False
+                break
+        else:
+            # Check if field is missing or empty
+            if field not in state.payload or state.payload.get(field) is None or not state.payload.get(field):
+                other_fields_complete = False
+                break
+
+    for field in clarification_flow:
+        if field == "Image_type":
+            # Only require Image_type if media is "Generate"
+            if state.payload.get("media") == "Generate":
+                if field not in state.payload or state.payload.get(field) is None or not state.payload.get(field):
+                    required_fields.append(field)
+        elif field == "content_idea":
+            # Special handling for content_idea - check word count
+            content_idea = state.payload.get("content_idea", "")
+            if not content_idea or len(content_idea.split()) < 10:
+                required_fields.append(field)
+        elif field == "media":
+            # Only ask for media if all other fields are complete
+            if other_fields_complete:
+                if field not in state.payload or state.payload.get(field) is None or not state.payload.get(field):
+                    required_fields.append(field)
+        else:
+            # Check if field is missing or empty
+            if field not in state.payload or state.payload.get(field) is None or not state.payload.get(field):
+                required_fields.append(field)
+
+    clarifications = FIELD_CLARIFICATIONS.get("create_content", {})
+
+    if not required_fields:
+        # Special handling for static post with Upload media
+        post_type = state.payload.get("Post_type")
+        media = state.payload.get("media")
+
+        print(f"🔍 DEBUG: Checking payload completion - post_type: {post_type}, media: {media}, payload keys: {list(state.payload.keys())}")
+
+        if post_type == "static_post" and media == "Upload":
+            print(f"📸 DEBUG: Static post with Upload detected")
+            # Check if media_url is already set
+            if not state.payload.get("media_url"):
+                print(f"📎 DEBUG: No media_url found, setting waiting_for_upload")
+                state.payload_complete = False
+                state.current_step = "waiting_for_media_upload"
+                state.clarification_question = "Please upload your media file for the static post."
+                state.result = "Please upload your media file for the static post."
+                state.waiting_for_upload = True
+                print("📎 Waiting for media upload for static post")
+                return state
+            else:
+                print(f"✅ DEBUG: Media URL already set: {state.payload.get('media_url')}, proceeding to action")
+
+        state.payload_complete = True
+        state.current_step = "action_execution"
+        print("✅ Create content payload complete")
+        return state
+
+    next_field = required_fields[0]
+    clarification_data = clarifications.get(next_field, {})
+
+    # Calculate remaining questions count
+    remaining_questions = len(required_fields)
+
+    if isinstance(clarification_data, dict):
+        base_question = clarification_data.get("question", f"Please provide: {next_field.replace('_', ' ')}")
+
+        # Question count will be included in the enhanced_base_question for personalization
+
+        # Special handling for channel options when content_type is a post type
+        if next_field == "channel":
+            content_type = state.payload.get("content_type")
+            print(f"DEBUG: Channel clarification - content_type is: {content_type}")
+            post_types = ["static_post", "carousel"]
+            if content_type in post_types:
+                # Filter channel options to only show Social Media for posts
+                original_options = clarification_data.get("options", [])
+                filtered_options = [
+                    option for option in original_options
+                    if option.get("value") in ["Social Media"]
+                ]
+        # Special handling for content_type options when platform is Instagram
+        elif next_field == "content_type":
+            platform = state.payload.get("platform")
+            print(f"DEBUG: Content type clarification - platform is: {platform}")
+            if platform == "Instagram":
+                # Filter out "Blog Post" for Instagram
+                original_options = clarification_data.get("options", [])
+                filtered_options = [
+                    option for option in original_options
+                    if option.get("value") != "blog"
+                ]
+                state.clarification_options = filtered_options
+                # Add question count to the base question that was already modified above
+                state.clarification_question = base_question
+                state.waiting_for_user = True
+                state.result = f"{base_question}\n\nPlease choose one of the options below:"
+                return state
+        # Special handling for media options when platform is Instagram
+        elif next_field == "media":
+            platform = state.payload.get("platform")
+            print(f"DEBUG: Media clarification - platform is: {platform}")
+            if platform == "Instagram":
+                # Filter out "Without media" for Instagram - Instagram requires visual content
+                original_options = clarification_data.get("options", [])
+                filtered_options = [
+                    option for option in original_options
+                    if option.get("value") != "Without media"
+                ]
+                state.clarification_options = filtered_options
+                # Add question count to the base question that was already modified above
+                state.clarification_question = base_question
+                state.waiting_for_user = True
+                state.result = f"{base_question}\n\nPlease choose one of the options below:"
+                return state
+                clarification_data = clarification_data.copy()
+                clarification_data["options"] = filtered_options
+                print(f"DEBUG: Filtered channel options to: {[opt.get('value') for opt in filtered_options]}")
+
+        # Special handling for platform options when channel is "Social Media"
+        if next_field == "platform":
+            channel = state.payload.get("channel")
+            print(f"DEBUG: Platform clarification - channel is: {channel}")
+            if channel == "Social Media":
+                # Filter platform options to only show social media platforms for Social Media channel
+                original_options = clarification_data.get("options", [])
+                filtered_options = [
+                    option for option in original_options
+                    if option.get("value") in ["Instagram", "Facebook", "LinkedIn", "YouTube"]
+                ]
+                clarification_data = clarification_data.copy()
+                clarification_data["options"] = filtered_options
+                print(f"DEBUG: Filtered platform options to: {[opt.get('value') for opt in filtered_options]}")
+
+        # Special handling for content_idea validation
+        if next_field == "content_idea":
+            existing_content = state.payload.get("content_idea", "")
+            if existing_content and len(existing_content.split()) < 10:
+                base_question = f"Your content idea is too short (needs at least 10 words). {base_question}"
+
+        # For Post_type and Image_type, get contextual LLM suggestion
+        if next_field in ["Post_type", "Image_type"]:
+            all_options = clarification_data.get("full_options", [])
+            if all_options:
+                contextual_suggestion = get_contextual_suggestion(
+                    field_type=next_field,
+                    conversation_context=state.user_query or "",
+                    all_options=all_options
+                )
+                base_question = f"{base_question} Based on what you've told me, how about '{contextual_suggestion}'? Or tell me your own preference!"
+
+        # Add remaining questions count to the question for personalization
+        question_count_context = f"I will ask you just {remaining_questions} more question{'s' if remaining_questions > 1 else ''} for further understanding."
+        enhanced_base_question = f"{question_count_context}\n\n{base_question}"
+
+        # Generate personalized question using LLM
+        logger.info(f"Calling LLM for clarification question. Base: '{enhanced_base_question}', User context length: {len(state.user_query or '')}")
+        personalized_question = generate_clarifying_question(
+            base_question=enhanced_base_question,
+            user_context=state.user_query,
+            user_input=state.user_query.split('\n')[-1] if state.user_query else ""
+        )
+        logger.info(f"LLM returned: '{personalized_question}'")
+
+        state.clarification_question = personalized_question
+        state.clarification_options = clarification_data.get("options", [])
+        # Only add "Please choose one of the options below:" if there are actually options
+        if state.clarification_options and len(state.clarification_options) > 0:
+            state.result = f"{personalized_question}\n\nPlease choose one of the options below:"
+        else:
+            state.result = personalized_question
+    else:
+        # Backward compatibility for string clarifications
+        question_text = clarification_data or f"Please provide: {next_field.replace('_', ' ')}"
+        # Add remaining questions count to the question
+        question_count_context = f"I will ask you just {remaining_questions} more question{'s' if remaining_questions > 1 else ''} for further understanding."
+        state.clarification_question = f"{question_count_context}\n\n{question_text}"
+        state.clarification_options = []
+        # Don't add "Please choose one of the options below:" when there are no options
+        state.result = state.clarification_question
+
+    state.waiting_for_user = True
+    state.current_step = "waiting_for_clarification"
+    print(f"❓ Clarification needed for create_content: {state.clarification_question}")
+
+    return state
+
+
+async def handle_create_content(state) -> Any:
+    """Generate and create content"""
+    # Import required functions
+    from .atsn import (
+        get_business_context_from_profile,
+        generate_image_enhancer_prompt,
+        build_brand_color_instructions,
+        build_location_context,
+        generate_carousel_image_prompts,
+        generate_carousel_images,
+        get_trends_from_grok,
+        generate_content_with_rl_agent,
+        extract_hashtags_from_caption,
+        generate_personalized_message,
+    )
+
+    payload = state.payload
+    
+    # Set agent name for content creation
+    payload['agent_name'] = 'chase'
+
+    if not state.payload_complete:
+        state.error = "Payload is not complete"
+        return state
+
+    # Debug logging
+    post_type = payload.get("Post_type")
+    media = payload.get("media")
+    media_url = payload.get("media_url")
+    print(f"🎯 DEBUG: handle_create_content called - post_type: {post_type}, media: {media}, media_url: {media_url}")
+    print(f"🎯 DEBUG: Full payload: {payload}")
+
+    try:
+        generated_content = ""
+        generated_image_url = None
+        content_data = {}  # Store data to save to database
+        title = payload.get('title') or payload.get('content_idea', '')
+
+        # Initialize parsed_trends as empty dict (will be populated if trends are fetched)
+        parsed_trends = {}
+
+        # Load business context and profile assets from profiles table
+        business_context = {}
+        profile_assets = {}
+        if state.user_id:
+            logger.info(f"🔍 Loading profile data for user_id: {state.user_id}")
+            try:
+                # Fetch comprehensive profile data including all context fields
+                profile_fields = [
+                    "business_name", "business_description", "brand_tone", "industry", "target_audience",
+                    "brand_voice", "unique_value_proposition", "primary_color", "secondary_color",
+                    "brand_colors", "logo_url", "timezone", "location_city", "location_state", "location_country"
+                ]
+                logger.info(f"🔍 Fetching profile fields: {', '.join(profile_fields)}")
+                profile_response = supabase.table("profiles").select(", ".join(profile_fields)).eq("id", state.user_id).execute()
+
+                logger.info(f"🔍 Profile query response: {len(profile_response.data) if profile_response.data else 0} records found")
+
+                if profile_response.data and len(profile_response.data) > 0:
+                    profile_data = profile_response.data[0]
+                    logger.info(f"🔍 Raw profile data: {profile_data}")
+
+                    business_context = get_business_context_from_profile(profile_data)
+
+                    # Extract brand assets for content and image generation
+                    profile_assets = {
+                        'primary_color': profile_data.get('primary_color'),
+                        'secondary_color': profile_data.get('secondary_color'),
+                        'brand_colors': profile_data.get('brand_colors') or [],  # Ensure it's always a list
+                        'logo': profile_data.get('logo_url'),  # Use correct column name
+                        'primary_typography': profile_data.get('primary_typography'),
+                        'secondary_typography': profile_data.get('secondary_typography')
+                    }
+
+                    logger.info(f"✅ Loaded structured business context for: {business_context.get('business_name', 'Business')}")
+                    logger.info(f"   Brand colors: {bool(profile_assets['primary_color'])}/{bool(profile_assets['secondary_color'])}")
+                    brand_colors_len = len(profile_assets.get('brand_colors') or [])
+                    logger.info(f"   Brand colors array: {brand_colors_len} colors")
+                    logger.info(f"   Logo: {bool(profile_assets.get('logo'))}")
+                    logger.info(f"   Typography: {bool(profile_assets.get('primary_typography'))}/{bool(profile_assets.get('secondary_typography'))}")
+                    logger.info(f"   Industry: {business_context.get('industry', 'N/A')}")
+                    logger.info(f"   Target audience: {business_context.get('target_audience', 'N/A')}")
+                else:
+                    logger.warning(f"❌ No profile data found for user_id: {state.user_id}, using defaults")
+                    logger.warning("   This usually means the user hasn't completed their profile onboarding")
+                    business_context = get_business_context_from_profile({})
+                    profile_assets = {'primary_color': None, 'secondary_color': None, 'brand_colors': [], 'logo': None}
+            except Exception as e:
+                logger.error(f"❌ Failed to load business context for user_id {state.user_id}: {e}")
+                logger.error(f"   Exception type: {type(e).__name__}")
+                import traceback
+                logger.error(f"   Traceback: {traceback.format_exc()}")
+                business_context = get_business_context_from_profile({})
+                profile_assets = {'primary_color': None, 'secondary_color': None, 'brand_colors': [], 'logo': None}
+        else:
+            logger.warning("❌ No user_id provided in state, using defaults")
+            business_context = get_business_context_from_profile({})
+            profile_assets = {'primary_color': None, 'secondary_color': None, 'brand_colors': [], 'logo': None}
+
+        # Handle different content types
+        content_type = payload.get('content_type', '')
+
+        if content_type == 'static_post':
+            # Check if user uploaded media
+            media_type = payload.get('media')
+            platform = payload.get('platform', 'Instagram').lower()
+
+            if media_type == 'Upload':
+                # Handle uploaded media - analyze image and generate caption
+                logger.info("📸 Handling uploaded media for static post")
+
+                # Check if media_url is provided - wait for Supabase upload completion
+                media_url = payload.get('media_url')
+                logger.info(f"Checking for uploaded media - media_url: {media_url}, payload keys: {list(payload.keys())}")
+
+                if not media_url:
+                    # Fallback: if no media_url but we're in Upload mode, set waiting_for_upload
+                    logger.warning(f"No media URL found in payload for Upload mode: {payload}")
+                    state.payload_complete = False
+                    state.current_step = "waiting_for_media_upload"
+                    state.waiting_for_upload = True
+                    state.result = "Please upload your media file for the static post."
+                    print("📎 Fallback: Setting waiting_for_upload due to missing media_url")
+                    return state
+
+                # Verify the media URL is accessible (uploaded to Supabase)
+                try:
+                    import httpx
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+                        response = await client.head(media_url)
+                        if response.status_code != 200:
+                            state.error = f"Media file not accessible (HTTP {response.status_code}). Please try uploading again."
+                            logger.error(f"Media URL not accessible: {media_url}, status: {response.status_code}")
+                            return state
+                except Exception as e:
+                    state.error = f"Failed to verify media upload: {str(e)}"
+                    logger.error(f"Error verifying media URL {media_url}: {e}")
+                    return state
+
+                logger.info(f"Media upload verified successfully: {media_url}")
+
+                # Analyze the uploaded image and generate caption
+                try:
+                    # Import Gemini for image analysis
+                    import google.generativeai as genai
+                    from dotenv import load_dotenv
+                    load_dotenv()
+                    import os
+
+                    google_api_key = os.getenv('GOOGLE_API_KEY')
+                    if not google_api_key:
+                        raise Exception("Google API key not found")
+
+                    genai.configure(api_key=google_api_key)
+
+                    # Use Gemini to analyze the image and generate caption
+                    model = genai.GenerativeModel('gemini-2.5-flash')
+
+                    # Download the image
+                    import httpx
+                    async with httpx.AsyncClient(follow_redirects=True) as client:
+                        image_response = await client.get(media_url)
+                        image_response.raise_for_status()
+                        image_data = image_response.content
+
+                    # Create image part for Gemini
+                    from PIL import Image
+                    import io
+                    image = Image.open(io.BytesIO(image_data))
+
+                    # Generate caption based on business context
+                    prompt = f"""Analyze this image and create an engaging social media caption for {business_context.get('business_name', 'our business')}.
+
+Business Context:
+- Business: {business_context.get('business_name', 'Business')}
+- Industry: {business_context.get('industry', 'General')}
+- Target Audience: {business_context.get('target_audience', 'General audience')}
+- Brand Voice: {business_context.get('brand_voice', 'Professional and friendly')}
+
+Image Analysis Task:
+1. Describe what you see in the image
+2. Understand the context and mood
+3. Create a compelling caption that would work well for {platform}
+4. Include relevant hashtags
+5. Make it engaging and brand-appropriate
+
+Return the caption with hashtags at the end."""
+
+                    response = model.generate_content([prompt, image])
+                    generated_caption = response.text.strip()
+
+                    # Extract hashtags from the generated caption
+                    import re
+                    hashtag_matches = re.findall(r'#\w+', generated_caption)
+                    hashtags = hashtag_matches if hashtag_matches else []
+
+                    # If no hashtags in response, add some basic ones
+                    if not hashtags:
+                        hashtags = ['#content', '#socialmedia']
+
+                    # Store the data
+                    topic = payload.get('content_idea', 'Uploaded image post')
+                    content_data['title'] = f"Post about {topic[:50]}"
+                    content_data['content'] = generated_caption
+                    content_data['hashtags'] = hashtags
+                    content_data['images'] = [media_url]  # Use the uploaded image
+
+                    generated_content = f"{content_data['title']}\n\n{content_data['content']}\n\n{' '.join(content_data['hashtags'])}"
+
+                    logger.info("✅ Generated caption for uploaded image successfully")
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to analyze uploaded image: {e}")
+                    raise Exception(f"Failed to analyze uploaded image: {str(e)}")
+
+            else:
+                # Use RL Agent for generated content
+                topic = payload.get('content_idea', '')
+                logger.info(f"🤖 Using RL Agent to generate content for topic: '{topic}' on {platform}")
+
+                # Call RL Agent API
+                rl_result = await generate_content_with_rl_agent(
+                    profile_id=state.user_id,  # Use the business profile ID
+                    topic=topic,
+                    platform=platform
+                )
+
+                if rl_result["success"]:
+                    # Use RL-generated content
+                    content_data['title'] = f"Post about {topic[:50]}"
+                    content_data['content'] = rl_result["caption"]
+                    content_data['hashtags'] = extract_hashtags_from_caption(rl_result["caption"])
+                    content_data['images'] = [rl_result["image_url"]] if rl_result.get("image_url") else []  # Store the RL-generated image as a list
+
+                    # Store RL metadata for learning
+                    content_data['rl_post_id'] = rl_result["post_id"]
+                    content_data['rl_action_id'] = rl_result["action_id"]
+
+                    generated_content = f"{content_data['title']}\n\n{content_data['content']}\n\n{' '.join(content_data['hashtags'])}"
+
+                    logger.info("✅ RL Agent generated content successfully")
+
+                else:
+                    # RL Agent failed - do not fallback, raise error
+                    error_msg = f"RL Agent failed to generate content: {rl_result['error']}"
+                    logger.error(f"❌ {error_msg}")
+                    raise Exception(error_msg)
+
+        elif content_type == 'carousel':
+            # CAROUSEL POST GENERATION
+            logger.info("🎠 Starting carousel post generation")
+
+            # Step 1: Determine number of images (default to 4, can be customized)
+            num_images = 4  # Default carousel length
+            if payload.get('content_idea'):
+                # Try to extract number from content idea (e.g., "5 slide carousel")
+                import re
+                number_match = re.search(r'(\d+)\s*(?:slide|image|photo|card)', payload['content_idea'], re.IGNORECASE)
+                if number_match:
+                    requested_num = int(number_match.group(1))
+                    num_images = max(3, min(6, requested_num))  # Keep between 3-6
+                    logger.info(f"📏 User requested {requested_num} images, adjusted to {num_images}")
+
+            # Step 2: Generate complete carousel plan (title, caption, and all image prompts)
+            carousel_plan = generate_carousel_image_prompts(
+                payload.get('content_idea', ''),
+                num_images,
+                business_context,
+                profile_assets
+            )
+
+            # Step 3: Generate all carousel images iteratively
+            carousel_image_urls = await generate_carousel_images(
+                carousel_plan,
+                business_context,
+                profile_assets
+            )
+
+            if not carousel_image_urls:
+                raise Exception("Failed to generate carousel images")
+
+            # Step 4: Extract data from carousel plan and save
+            title = carousel_plan["title"]
+            content = carousel_plan["caption"]
+            hashtags = []  # Extract hashtags from caption if needed
+
+            # Extract hashtags from caption (simple extraction)
+            import re
+            hashtag_matches = re.findall(r'#\w+', content)
+            hashtags = hashtag_matches
+
+            # Save carousel data
+            content_data['title'] = title
+            content_data['content'] = content
+            content_data['hashtags'] = hashtags
+            content_data['carousel_images'] = carousel_image_urls  # Save to carousel_images column
+
+            generated_content = f"{title}\n\n{content}\n\n{' '.join(hashtags)}\n\n🎠 Carousel with {len(carousel_image_urls)} images"
+            logger.info(f"✅ Generated carousel post with {len(carousel_image_urls)} images from complete plan")
+
+        elif content_type == 'short_video or reel':
+            # Check if user wants to upload their own video
+            if payload.get('media') == 'Upload':
+                # Set flag for upload requirement - user will upload both video and cover
+                if not payload.get('media_file'):
+                    state.waiting_for_upload = True
+                    state.upload_type = 'video'  # They need to upload video file
+                    state.result = "Ready to upload your short video/reel. Please select and upload a video file."
+                    return state
+                else:
+                    # File already uploaded, use it
+                    generated_image_url = payload.get('media_file')
+                    if generated_image_url:
+                        content_data['images'] = [generated_image_url]
+
+            # Step 1: Get viral content trends from Grok
+            topic = payload.get('content_idea', 'viral content trends')
+            trends_data = await get_trends_from_grok(topic, business_context)
+
+            # Step 2: Generate short video script using GPT-4o-mini with trend insights
+            viral_content = ""
+            if trends_data and 'trends' in trends_data:
+                viral_content = "\n\nVIRAL CONTENT INSIGHTS:\n" + "\n".join([
+                    f"- {trend.get('trend_name', '')}: {trend.get('description', '')[:100]}..."
+                    for trend in trends_data['trends'][:3]  # Top 3 trends
+                ])
+
+            prompt = f"""You are a professional short-form video script writer creating viral content for {payload.get('platform', 'social media')} Reels.
+
+BUSINESS CONTEXT:
+{business_context.get('business_name', 'Business')}
+Industry: {business_context.get('industry', 'General')}
+Target Audience: {business_context.get('target_audience', 'General audience')}
+Brand Voice: {business_context.get('brand_voice', 'Professional and friendly')}
+Business Description: {business_context.get('business_description', 'N/A')}
+
+CONTENT REQUIREMENTS:
+- Platform: {payload.get('platform', 'Instagram Reels/TikTok/YouTube Shorts')}
+- Content Idea: {payload.get('content_idea', '')}
+- Duration: 15-30 seconds (keep script concise and punchy)
+- Goal: Create engaging, scroll-stopping content{viral_content}
+
+TASK:
+Create a complete 15-30 second video script optimized for virality that includes:
+1. STRONG HOOK (0-3 seconds - shock, question, or surprising fact)
+2. VALUE DELIVERY (3-20 seconds - solve problem or provide insight)
+3. EMOTIONAL CLOSE (20-25 seconds - build connection)
+4. CLEAR CTA (25-30 seconds - what to do next)
+
+SCRIPT FORMAT:
+🎬 SCENE BREAKDOWN:
+[0-3s] HOOK: [One powerful sentence that stops the scroll]
+[3-20s] VALUE: [2-3 key points that deliver real value]
+[20-25s] STORY/CONNECTION: [Make it relatable, add emotion]
+[25-30s] CTA: [Specific action + urgency]
+
+VISUAL CUES:
+- Background music suggestions
+- Text overlays for key points
+- Transitions between sections
+- Thumbnail-worthy moments
+
+Make it conversational, authentic, and optimized for the algorithm."""
+
+            if openai_client:
+                response = openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=1000,
+                    temperature=0.8
+                )
+                generated_script = response.choices[0].message.content.strip()
+                content_data['short_video_script'] = generated_script  # Save to short_video_script column
+                content_data['content'] = generated_script  # Required field for database
+
+                # Step 3: Generate video cover image using Gemini (only if not uploading)
+                if payload.get('media') != 'Upload' and not payload.get('media_url'):
+                    cover_prompt = f"""Create a professional, eye-catching thumbnail image for a {payload.get('platform', 'social media')} short video about: {payload.get('content_idea', 'viral content')}
+
+Business: {business_context.get('business_name', 'Business')}
+Style: Scroll-stopping, viral-worthy, modern and engaging
+Visual elements: Bold text overlays, vibrant gradients, clean mobile-first design
+Composition: High contrast, clear focal point, optimized for 9:16 aspect ratio
+Make it irresistible to click and watch!"""
+
+                logger.info(f"🎨 Complete video cover generation prompt:")
+                logger.info("=" * 80)
+                logger.info(cover_prompt)
+                logger.info("=" * 80)
+
+                # Check if logo is available and prepare to send it to Gemini
+                logo_data = None
+                if profile_assets and profile_assets.get('logo'):
+                    logo_url = profile_assets.get('logo')
+                    logger.info(f"📎 Including logo in video cover generation: {logo_url}")
+                    try:
+                        import httpx
+                        async with httpx.AsyncClient(follow_redirects=True) as client:
+                            logo_response = await client.get(logo_url)
+                            logo_response.raise_for_status()
+                            logo_data = logo_response.content
+                        logger.info(f"✅ Logo downloaded successfully: {len(logo_data)} bytes")
+                    except Exception as e:
+                        logger.warning(f"Failed to download logo: {e}")
+                        logo_data = None
+
+                # Generate image with Gemini
+                logger.info(f"🎨 Generating video cover with Gemini for platform: {payload.get('platform')} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                logger.info(f"   Logo included: {logo_data is not None}")
+
+                gemini_image_model = 'gemini-2.5-flash-image'
+
+                # Prepare contents for Gemini API
+                contents = [cover_prompt]  # Text prompt is always first
+
+                # Add logo as reference image if available
+                if logo_data:
+                    import base64
+                    contents.append({
+                        "inline_data": {
+                            "mime_type": "image/png",  # Assume PNG for transparency
+                            "data": base64.b64encode(logo_data).decode('utf-8')
+                        }
+                    })
+
+                image_response = genai.GenerativeModel(gemini_image_model).generate_content(
+                    contents=contents
+                )
+                logger.info(f"Gemini response received, has candidates: {bool(image_response.candidates)}")
+
+                # Extract image data
+                if image_response.candidates and len(image_response.candidates) > 0:
+                    candidate = image_response.candidates[0]
+                    if candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if part.inline_data is not None and part.inline_data.data:
+                                try:
+                                    # Get image data as bytes
+                                    image_data = part.inline_data.data
+                                    if not isinstance(image_data, bytes):
+                                        import base64
+                                        image_data = base64.b64decode(image_data)
+
+                                    # Generate unique filename
+                                    import uuid
+                                    filename = f"video_covers/{uuid.uuid4()}.png"
+                                    file_path = filename
+
+                                    logger.info(f"📤 Uploading generated video cover to ai-generated-images bucket: {file_path}")
+
+                                    # Upload to ai-generated-images bucket in generated folder
+                                    storage_response = supabase.storage.from_("ai-generated-images").upload(
+                                        file_path,
+                                        image_data,
+                                        file_options={"content-type": "image/png", "upsert": "false"}
+                                    )
+
+                                    if hasattr(storage_response, 'error') and storage_response.error:
+                                        logger.error(f"Storage upload error: {storage_response.error}")
+                                        generated_image_url = None
+                                    else:
+                                        # Get public URL
+                                        generated_image_url = supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+                                        logger.info(f"✅ Video cover uploaded successfully: {generated_image_url}")
+
+                                        if generated_image_url and isinstance(generated_image_url, str):
+                                            content_data['images'] = [generated_image_url]
+
+                                            # Update metadata for video cover
+                                            content_data['metadata'] = {
+                                                'video_cover_generated': True,
+                                                'cover_prompt': cover_prompt,
+                                                'trends_used': trends_data.get('trends', [])[:3] if trends_data else [],
+                                                'generated_with': 'gemini'
+                                            }
+                                        else:
+                                            logger.error(f"Invalid public URL returned: {generated_image_url}")
+
+                                except Exception as upload_error:
+                                    logger.error(f"Error uploading video cover to storage: {upload_error}")
+
+                                break
+                    else:
+                        # When uploading, don't generate cover - user will upload their own
+                        content_data['metadata'] = {
+                            'video_cover_uploaded': True,
+                            'trends_used': trends_data.get('trends', [])[:3] if trends_data else [],
+                            'generated_with': 'user_upload'
+                        }
+
+                # Step 4: Generate compelling title and caption for the reel
+                caption_prompt = f"""Based on this short video script, create a compelling title and Instagram caption for the reel.
+
+VIDEO SCRIPT:
+{generated_script}
+
+BUSINESS CONTEXT:
+{business_context.get('business_name', 'Business')}
+Industry: {business_context.get('industry', 'General')}
+Target Audience: {business_context.get('target_audience', 'General audience')}
+
+TASK:
+Create a viral-worthy Instagram Reel title and caption that will:
+1. Hook viewers in the first 3 words
+2. Use trending hashtags and emojis naturally
+3. Include a strong call-to-action
+4. Be optimized for Instagram's algorithm
+
+FORMAT (Return ONLY this format):
+TITLE: [Compelling 1-5 word title]
+CAPTION: [Scroll-stopping caption with emojis, 100-150 characters]
+
+Make it authentic, engaging, and optimized for maximum engagement!"""
+
+                try:
+                    caption_response = openai_client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": caption_prompt}],
+                        max_tokens=300,
+                        temperature=0.9
+                    )
+                    caption_result = caption_response.choices[0].message.content.strip()
+
+                    # Parse title and caption
+                    title = ""
+                    caption = ""
+                    for line in caption_result.split('\n'):
+                        line = line.strip()
+                        if line.startswith('TITLE:'):
+                            title = line.replace('TITLE:', '').strip()
+                        elif line.startswith('CAPTION:'):
+                            caption = line.replace('CAPTION:', '').strip()
+
+                    # Save title and caption
+                    content_data['title'] = title if title else f"Reel: {payload.get('content_idea', 'Viral Content')[:30]}"
+                    content_data['content'] = caption if caption else generated_script[:200] + "..."
+
+                    logger.info(f"✅ Generated reel title: '{title}' and caption: '{caption[:50]}...'")
+
+                except Exception as caption_error:
+                    logger.warning(f"Failed to generate reel caption: {caption_error}")
+                    # Fallback: use script as content
+                    content_data['title'] = f"Reel: {payload.get('content_idea', 'Viral Content')[:30]}"
+                    content_data['content'] = generated_script[:200] + "..."
+
+                generated_content = f"🎬 Short Video Script Generated:\n\n{generated_script}"
+            else:
+                generated_content = "OpenAI client not configured"
+                content_data['short_video_script'] = "Script generation failed - OpenAI client not configured"
+                content_data['title'] = "Reel Generation Failed"
+                content_data['content'] = generated_content
+
+        elif content_type == 'long_video':
+            # Generate long video script using GPT-4o-mini
+            prompt = f"""You are a professional video script writer specializing in long-form video content.
+
+BUSINESS CONTEXT:
+{business_context.get('business_name', 'Business')}
+Industry: {business_context.get('industry', 'General')}
+Target Audience: {business_context.get('target_audience', 'General audience')}
+Brand Voice: {business_context.get('brand_voice', 'Professional and friendly')}
+
+CONTENT REQUIREMENTS:
+- Platform: {payload.get('platform', 'YouTube/Vimeo')}
+- Content Idea: {payload.get('content_idea', '')}
+- Duration: 5-15 minutes
+
+TASK:
+Create a complete long-form video script that includes:
+1. Introduction/Hook (30-60 seconds)
+2. Main content sections with clear structure
+3. Key points and value delivery
+4. Conclusion with call-to-action
+5. Visual and editing cues
+
+SCRIPT FORMAT:
+[0:00-0:30] INTRODUCTION: [Hook and overview]
+[0:30-8:00] MAIN CONTENT: [Detailed explanation with sections]
+[8:00-10:00] CONCLUSION: [Summary and CTA]
+
+Use professional, engaging language.
+Include timing estimates for each section."""
+
+            if openai_client:
+                response = openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=2000,
+                    temperature=0.7
+                )
+                generated_script = response.choices[0].message.content.strip()
+                content_data['long_video_script'] = generated_script  # Save to long_video_script column
+                generated_content = f"Long Video Script Generated:\n\n{generated_script}"
+            else:
+                generated_content = "OpenAI client not configured"
+                content_data['long_video_script'] = "Script generation failed - OpenAI client not configured"
+
+
+        else:
+            # For other content types, use original logic
+            generated_content = f"Generated {content_type} for {payload.get('platform', 'platform')}"
+            content_data['content'] = generated_content
+
+        # Handle media generation based on payload.media
+        logger.info(f"Media type: {payload.get('media')}")
+        if payload.get('media') == 'Generate' and not payload.get('media_url'):
+            # Generate image using Gemini with the generated content and business context
+            try:
+                # First, generate enhanced image prompt using AI
+                content_for_image = content_data.get('content') or ""
+                if not content_for_image and content_type == 'static_post':
+                    content_for_image = (
+                        generated_content
+                        or payload.get('content')
+                        or payload.get('content_idea')
+                        or ""
+                    )
+                generated_post = {
+                    'title': title,
+                    'content': content_for_image
+                }
+
+                enhanced_prompt_data = await generate_image_enhancer_prompt(
+                    generated_post, payload, business_context, parsed_trends, profile_assets, state.user_query
+                )
+
+                # Build final image generation prompt using the enhanced prompt
+                current_datetime = datetime.now()
+                current_date = current_datetime.strftime("%Y-%m-%d")
+                current_time = current_datetime.strftime("%H:%M:%S UTC")
+
+                # Use the enhanced prompt as the base
+                base_prompt = enhanced_prompt_data.get('image_prompt', f"Create a professional image for: {title}")
+                visual_style = enhanced_prompt_data.get('visual_style', 'photorealistic')
+                aspect_ratio = enhanced_prompt_data.get('aspect_ratio', '1:1')
+                negative_prompt = enhanced_prompt_data.get('negative_prompt', 'text, logos, watermarks')
+
+                # Build color instructions and location context using helper functions
+                color_instructions = build_brand_color_instructions(profile_assets, business_context)
+                location_context = build_location_context(business_context)
+
+                image_prompt = f"""{base_prompt}
+
+VISUAL REQUIREMENTS:
+- Style: {visual_style}
+- Aspect Ratio: {aspect_ratio}
+- Business: {business_context.get('business_name', 'Business')}
+- Industry: {business_context.get('industry', 'General')}
+- Target Audience: {business_context.get('target_audience', 'General audience')}
+{color_instructions}
+
+{location_context}
+
+AVOID: {negative_prompt}
+
+Create a high-quality, professional image optimized for Instagram that reflects current design trends for {current_date}."""
+
+                # Log the complete image generation prompt
+                logger.info(f"🎨 Complete image generation prompt being sent to Gemini:")
+                logger.info("=" * 80)
+                logger.info(image_prompt)
+                logger.info("=" * 80)
+
+                # Check if logo is available and prepare to send it to Gemini
+                logo_data = None
+                if profile_assets and profile_assets.get('logo'):
+                    logo_url = profile_assets.get('logo')
+                    logger.info(f"📎 Including logo in image generation: {logo_url}")
+                    try:
+                        import httpx
+                        async with httpx.AsyncClient(follow_redirects=True) as client:
+                            logo_response = await client.get(logo_url)
+                            logo_response.raise_for_status()
+                            logo_data = logo_response.content
+                        logger.info(f"✅ Logo downloaded successfully: {len(logo_data)} bytes")
+                    except Exception as e:
+                        logger.warning(f"Failed to download logo: {e}")
+                        logo_data = None
+
+                # Generate image with Gemini
+                logger.info(f"🎨 Generating image with Gemini for platform: {payload.get('platform')} at {current_datetime.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                logger.info(f"   Using enhanced prompt with {visual_style} style and {aspect_ratio} aspect ratio")
+                logger.info(f"   Logo included: {logo_data is not None}")
+
+                gemini_image_model = 'gemini-2.5-flash-image'
+
+                # Prepare contents for Gemini API
+                contents = [image_prompt]  # Text prompt is always first
+
+                # Add logo as reference image if available
+                if logo_data:
+                    import base64
+                    contents.append({
+                        "inline_data": {
+                            "mime_type": "image/png",  # Assume PNG for transparency
+                            "data": base64.b64encode(logo_data).decode('utf-8')
+                        }
+                    })
+
+                image_response = genai.GenerativeModel(gemini_image_model).generate_content(
+                    contents=contents
+                )
+                logger.info(f"Gemini response received, has candidates: {bool(image_response.candidates)}")
+
+                # Extract image data
+                if image_response.candidates and len(image_response.candidates) > 0:
+                    candidate = image_response.candidates[0]
+                    if candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if part.inline_data is not None and part.inline_data.data:
+                                try:
+                                    # Get image data as bytes
+                                    image_data = part.inline_data.data
+                                    if not isinstance(image_data, bytes):
+                                        import base64
+                                        image_data = base64.b64decode(image_data)
+
+                                    # Generate unique filename
+                                    import uuid
+                                    filename = f"generated/{uuid.uuid4()}.png"
+                                    file_path = filename
+
+                                    logger.info(f"📤 Uploading generated image to content-images bucket: {file_path}")
+
+                                    # Upload to ai-generated-images bucket in generated folder
+                                    storage_response = supabase.storage.from_("ai-generated-images").upload(
+                                        file_path,
+                                        image_data,
+                                        file_options={"content-type": "image/png", "upsert": "false"}
+                                    )
+
+                                    if hasattr(storage_response, 'error') and storage_response.error:
+                                        logger.error(f"Storage upload error: {storage_response.error}")
+                                        generated_image_url = None
+                                    else:
+                                        # Get public URL
+                                        generated_image_url = supabase.storage.from_("ai-generated-images").get_public_url(file_path)
+                                        logger.info(f"✅ Image uploaded successfully: {generated_image_url}")
+
+                                        if generated_image_url and isinstance(generated_image_url, str):
+                                            content_data['images'] = [generated_image_url]
+
+                                            # ✅ Increment image count after successful generation and storage
+                                            try:
+                                                # Read current image count and increment
+                                                current_images = supabase.table('profiles').select('images_generated_this_month').eq('id', state.user_id).execute()
+                                                if current_images.data and len(current_images.data) > 0:
+                                                    current_image_count = current_images.data[0]['images_generated_this_month'] or 0
+                                                    supabase.table('profiles').update({
+                                                        'images_generated_this_month': current_image_count + 1
+                                                    }).eq('id', state.user_id).execute()
+                                                    logger.info(f"Incremented image count for user {state.user_id} after successful generation (from {current_image_count} to {current_image_count + 1})")
+                                            except Exception as counter_error:
+                                                logger.error(f"Error incrementing image count after generation: {counter_error}")
+                                        else:
+                                            logger.error(f"Invalid public URL returned: {generated_image_url}")
+                                            generated_image_url = None
+
+                                except Exception as upload_error:
+                                    logger.error(f"Error uploading image to storage: {upload_error}")
+                                    generated_image_url = None
+
+                                break
+
+            except Exception as e:
+                logger.error(f"Image generation failed: {e}")
+                generated_image_url = None
+
+        elif payload.get('media') == 'Upload':
+            # Set flag for upload requirement
+            if not payload.get('media_file'):
+                # No file uploaded yet, set upload flag
+                state.waiting_for_upload = True
+                state.upload_type = 'image'
+                state.result = "Ready to upload an image for your content. Please select and upload an image file."
+                return state
+            else:
+                # File already uploaded, use it
+                generated_image_url = payload.get('media_file')
+                if generated_image_url:
+                    content_data['images'] = [generated_image_url]
+        # For "without media", no images added
+
+        # Save to Supabase created_content table
+        logger.info(f"💾 Preparing to save content_data keys: {list(content_data.keys())}")
+        if state.user_id and content_data:
+            try:
+                # Prepare data for created_content table
+                db_data = {
+                    'user_id': state.user_id,
+                    'platform': payload.get('platform', '').lower(),
+                    'content_type': content_type.lower(),
+                    'title': content_data.get('title', f"{content_type} for {payload.get('platform', 'Platform').lower()}"),
+                    'status': 'generated',
+                    'metadata': {
+                        'channel': payload.get('channel'),
+                        'content_idea': payload.get('content_idea'),
+                        'generated_at': datetime.now().isoformat()
+                    },
+                    **content_data  # This spreads the content-specific data into the correct columns
+                }
+
+                # Insert into created_content table
+                result = supabase.table('created_content').insert(db_data).execute()
+                if result.data and len(result.data) > 0:
+                    content_id = result.data[0]['id']
+                    state.content_id = str(content_id)
+                    logger.info(f"✅ Successfully saved {content_type} content to created_content table with ID: {content_id}")
+
+                    # Log which columns were saved
+                    saved_columns = list(content_data.keys())
+                    logger.info(f"📝 Saved content to columns: {', '.join(saved_columns)}")
+                    logger.info(f"📸 Images in content_data: {'images' in content_data and len(content_data.get('images', []))} image(s)")
+                    logger.info(f"🎠 Carousel images in content_data: {'carousel_images' in content_data and len(content_data.get('carousel_images', []))} image(s)")
+                    if 'images' in content_data:
+                        logger.info(f"📸 Image URLs saved: {len(content_data['images'])} URL(s) in database")
+                    if 'carousel_images' in content_data:
+                        logger.info(f"🎠 Carousel image URLs saved: {len(content_data['carousel_images'])} URL(s) in database")
+                else:
+                    logger.warning("Failed to save content to created_content table - no data returned")
+
+            except Exception as e:
+                logger.error(f"Error saving content to created_content table: {e}")
+                state.error = f"Failed to save content to database: {str(e)}"
+
+        # Generate display content ID
+        display_content_id = f"CONTENT_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+        # Create content item for frontend display
+        if state.user_id and state.content_id:
+            try:
+                # Fetch the newly created content from database to get complete data
+                content_response = supabase.table('created_content').select('*').eq('id', state.content_id).execute()
+                if content_response.data and len(content_response.data) > 0:
+                    item = content_response.data[0]
+
+                    # Extract image URL from images array or carousel_images array
+                    images = item.get('images', [])
+                    carousel_images = item.get('carousel_images', [])
+                    media_url = None
+
+                    if carousel_images and len(carousel_images) > 0:
+                        # For carousel posts, use first carousel image
+                        first_image = carousel_images[0]
+                        if isinstance(first_image, str):
+                            media_url = first_image
+                    elif images and len(images) > 0:
+                        # For regular posts, use first image
+                        first_image = images[0]
+                        if isinstance(first_image, str):
+                            media_url = first_image
+
+                    # Format hashtags
+                    hashtags = item.get('hashtags', [])
+                    hashtag_text = ''
+                    if hashtags:
+                        if isinstance(hashtags, list):
+                            hashtag_text = ' '.join([f"#{tag}" if not tag.startswith('#') else tag for tag in hashtags[:10]])
+
+                    # Format date
+                    created_at = item.get('created_at', '')
+                    date_display = ''
+                    if created_at:
+                        try:
+                            dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                            date_display = dt.strftime('%B %d, %Y at %I:%M %p')
+                        except:
+                            date_display = created_at[:10] if len(created_at) >= 10 else created_at
+
+                    # Get content text based on content type
+                    content_type = item.get('content_type', 'post')
+                    content_text = ''
+                    if content_type == 'email':
+                        if item.get('email_subject') and item.get('email_body'):
+                            content_text = f"Subject: {item['email_subject']}\n\n{item['email_body']}"
+                        else:
+                            content_text = item.get('content', '')
+                    elif content_type == 'short_video or reel':
+                        content_text = item.get('short_video_script', '')
+                    elif content_type == 'long_video':
+                        content_text = item.get('long_video_script', '')
+                    elif content_type == 'carousel':
+                        carousel_images = item.get('carousel_images', [])
+                        content_text = f"{item.get('content', '')}\n\n🎠 Carousel Post with {len(carousel_images)} images"
+                    elif content_type == 'message':
+                        content_text = item.get('message', '')
+                    else:
+                        content_text = item.get('content', '')
+
+                    # Get title
+                    title = item.get('title', f"{content_type.title()} for {item.get('platform', 'Platform')}")
+
+                    # Create structured content item for frontend
+                    content_item = {
+                        'id': 1,  # Single item
+                        'content_id': state.content_id,
+                        'platform': item.get('platform', 'Unknown').title(),
+                        'content_type': content_type.replace('_', ' ').title(),
+                        'status': item.get('status', 'generated').title(),
+                        'created_at': date_display,
+                        'created_at_raw': created_at,
+                        'title': title,
+                        'title_display': title,
+                        'content_text': content_text,
+                        'content_preview': content_text[:150] + '...' if len(content_text) > 150 else content_text,
+                        'hashtags': hashtag_text,
+                        'hashtags_display': hashtag_text,
+                        'media_url': media_url,
+                        'has_media': bool(media_url),
+                        'images': item.get('images', []),
+                        # Additional fields for different content types
+                        'email_subject': item.get('email_subject'),
+                        'email_body': item.get('email_body'),
+                        'short_video_script': item.get('short_video_script'),
+                        'long_video_script': item.get('long_video_script'),
+                        'message': item.get('message'),
+                        # Platform emoji
+                        'platform_emoji': {
+                            'Instagram': '📸',
+                            'Facebook': '👥',
+                            'Linkedin': '💼',
+                            'Youtube': '🎥',
+                            'Gmail': '✉️',
+                            'Whatsapp': '💬'
+                        }.get(item.get('platform', 'Unknown').title(), '🌐'),
+                        # Status emoji and color
+                        'status_emoji': {
+                            'Generated': '📝',
+                            'Scheduled': '⏰',
+                            'Published': '✅'
+                        }.get(item.get('status', 'generated').title(), '📄'),
+                        'status_color': {
+                            'Generated': 'blue',
+                            'Scheduled': 'orange',
+                            'Published': 'green'
+                        }.get(item.get('status', 'generated').title(), 'gray'),
+                        'metadata': item.get('metadata', {}),
+                        'raw_data': item
+                    }
+
+                    # Set content_items for frontend display
+                    state.content_items = [content_item]
+
+            except Exception as e:
+                logger.error(f"Error creating content item for display: {e}")
+
+        # Set intent for frontend to enable action buttons
+        state.intent = "created_content"
+
+        # Minimal success response - cards will be displayed by frontend
+        base_message = "Content created successfully! Use the action buttons below to manage your content."
+        state.result = generate_personalized_message(
+            base_message=base_message,
+            user_context=state.user_query,
+            message_type="success"
+        )
+        
+    except Exception as e:
+        state.error = f"Content generation failed: {str(e)}"
+        logger.error(f"Content creation error: {e}")
+    
+    return state

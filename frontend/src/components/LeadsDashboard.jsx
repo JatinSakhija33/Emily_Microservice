@@ -1,0 +1,1288 @@
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useAuth } from '../contexts/AuthContext'
+import { useNotifications } from '../contexts/NotificationContext'
+import { leadsAPI } from '../services/leads'
+import SideNavbar from './SideNavbar'
+import MobileNavigation from './MobileNavigation'
+import LeadCard from './LeadCard'
+import LeadDetailModal from './LeadDetailModal'
+import AddLeadModal from './AddLeadModal'
+
+// Dark mode hook
+const useDarkMode = () => {
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Check localStorage for saved preference, default to light mode
+    const saved = localStorage.getItem('darkMode')
+    return saved !== null ? saved === 'true' : true // Default to true (dark mode)
+  })
+
+  useEffect(() => {
+    localStorage.setItem('darkMode', isDarkMode.toString())
+    // Apply to document for global dark mode
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
+
+  // Listen for dark mode changes from navbar
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.detail && event.detail.key === 'darkMode') {
+        const newValue = event.detail.newValue === 'true'
+        setIsDarkMode(newValue)
+      }
+    }
+
+    // Also listen for direct localStorage changes (for cross-tab sync)
+    const handleLocalStorageChange = (e) => {
+      if (e.key === 'darkMode') {
+        const newValue = e.newValue === 'true'
+        setIsDarkMode(newValue)
+      }
+    }
+
+    window.addEventListener('localStorageChange', handleStorageChange)
+    window.addEventListener('storage', handleLocalStorageChange)
+
+    return () => {
+      window.removeEventListener('localStorageChange', handleStorageChange)
+      window.removeEventListener('storage', handleLocalStorageChange)
+    }
+  }, [])
+
+  return [isDarkMode, setIsDarkMode]
+}
+import {
+  Users,
+  UserPlus,
+  CheckCircle,
+  MessageCircle,
+  TrendingUp,
+  Search,
+  Filter,
+  RefreshCw,
+  Loader2,
+  XCircle,
+  AlertCircle,
+  Facebook,
+  Instagram,
+  X,
+  CalendarDays
+} from 'lucide-react'
+
+// Get date range for filtering (moved outside component to prevent recreation)
+const getDateRange = (range) => {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+  switch (range) {
+    case 'today':
+      return {
+        start: today,
+        end: new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1)
+      }
+    case 'this_week': {
+      const dayOfWeek = now.getDay()
+      const startOfWeek = new Date(today)
+      startOfWeek.setDate(today.getDate() - dayOfWeek)
+      return {
+        start: startOfWeek,
+        end: new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1)
+      }
+    }
+    case 'this_month': {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      return {
+        start: startOfMonth,
+        end: new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1)
+      }
+    }
+    case 'last_month': {
+      const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
+      return {
+        start: lastMonth,
+        end: endOfLastMonth
+      }
+    }
+    default:
+      return null
+  }
+}
+
+const LeadsDashboard = () => {
+  const { user } = useAuth()
+  const { showSuccess, showError, showInfo } = useNotifications()
+  const [isDarkMode, setIsDarkMode] = useDarkMode()
+  const [leads, setLeads] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selectedLead, setSelectedLead] = useState(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [importingCSV, setImportingCSV] = useState(false)
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [filterPlatform, setFilterPlatform] = useState('all')
+  const [filterDateRange, setFilterDateRange] = useState('this_week')
+  const [showOverdueFollowUpsOnly, setShowOverdueFollowUpsOnly] = useState(false)
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+  const [lastFetchTime, setLastFetchTime] = useState(null)
+  const [pollingInterval, setPollingInterval] = useState(null)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedLeadIds, setSelectedLeadIds] = useState(new Set())
+  const [deletingBulk, setDeletingBulk] = useState(false)
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  const leadsRef = useRef([])
+  const lastFetchTimeRef = useRef(null)
+
+  // Load all leads at once - no pagination
+  const [loadedCount, setLoadedCount] = useState(0)
+  const [total, setTotal] = useState(0)
+  const pageSize = 500 // Load maximum allowed leads (backend limit)
+
+  const fetchLeads = useCallback(async (showLoading = true) => {
+    try {
+      if (showLoading) setLoading(true)
+
+      const params = {}
+      if (filterStatus !== 'all') {
+        params.status = filterStatus
+      }
+      if (filterPlatform !== 'all') {
+        params.source_platform = filterPlatform
+      }
+      params.limit = pageSize
+
+      const response = await leadsAPI.getLeads(params)
+
+      // Handle both old format (array) and new format (object with leads array)
+      let fetchedLeads = []
+      let totalCount = 0
+      let hasMoreData = false
+
+      if (Array.isArray(response.data)) {
+        // Old format - backward compatibility (just an array of leads)
+        fetchedLeads = response.data
+        totalCount = fetchedLeads.length
+        hasMoreData = false // Load all leads at once, no pagination
+      } else if (response.data && response.data.leads) {
+        // New format with pagination metadata
+        fetchedLeads = response.data.leads || []
+        totalCount = response.data.total || fetchedLeads.length
+        hasMoreData = false // Load all leads at once, no pagination
+      } else {
+        fetchedLeads = []
+        totalCount = 0
+        hasMoreData = false
+      }
+
+      // Check for new leads using refs to avoid dependency issues (only on first load)
+      if (loadedCount === 0) {
+        const previousLeads = leadsRef.current
+        const previousFetchTime = lastFetchTimeRef.current
+
+        if (previousFetchTime && previousLeads.length > 0) {
+          const newLeads = fetchedLeads.filter(newLead => {
+            const newLeadTime = new Date(newLead.created_at)
+            return newLeadTime > previousFetchTime && !previousLeads.find(l => l.id === newLead.id)
+          })
+
+          if (newLeads.length > 0) {
+            showInfo(
+              'New Lead!',
+              `${newLeads.length} new lead${newLeads.length > 1 ? 's' : ''} received`,
+              {
+                type: 'lead',
+                leadIds: newLeads.map(l => l.id)
+              }
+            )
+          }
+        }
+      }
+
+      // Update state and refs
+      setLeads(fetchedLeads)
+      setLoadedCount(fetchedLeads.length)
+
+      setTotal(totalCount)
+      // Load all leads at once, no pagination needed
+
+      console.log(`FetchLeads: fetched=${fetchedLeads.length}, total=${totalCount}`)
+
+      leadsRef.current = fetchedLeads
+
+      const now = new Date()
+      setLastFetchTime(now)
+      lastFetchTimeRef.current = now
+
+    } catch (error) {
+      console.error('Error fetching leads:', error)
+      showError('Error', 'Failed to fetch leads. Please try again.')
+    } finally {
+      if (showLoading) setLoading(false)
+    }
+  }, [filterStatus, filterPlatform, pageSize, showError, showInfo])
+
+  // Clear leads data on logout
+  useEffect(() => {
+    if (!user) {
+      setLeads([])
+      setLastFetchTime(null)
+      setSelectedLead(null)
+      setShowDetailModal(false)
+      setSelectedLeadIds(new Set())
+      setSelectionMode(false)
+      setLoadedCount(0)
+    }
+  }, [user])
+
+  // Clear polling interval on logout
+  useEffect(() => {
+    if (!user && pollingInterval) {
+      clearInterval(pollingInterval)
+      setPollingInterval(null)
+    }
+  }, [user, pollingInterval])
+
+  // Check for URL parameters to apply filters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const filterParam = urlParams.get('filter')
+
+    if (filterParam === 'overdue_followups') {
+      setShowOverdueFollowUpsOnly(true)
+      // Clear the URL parameter to avoid re-applying on refresh
+      const newUrl = window.location.pathname
+      window.history.replaceState({}, '', newUrl)
+    }
+  }, [])
+
+  // Reset loaded count when filters change
+  useEffect(() => {
+    if (user) {
+      setLoadedCount(0)
+    }
+  }, [user, filterStatus, filterPlatform])
+
+  // Initial fetch and refetch when filters change
+  useEffect(() => {
+    if (user) {
+      fetchLeads()
+    }
+  }, [user, filterStatus, filterPlatform]) // Removed fetchLeads from dependencies
+
+  // No infinite scrolling - all leads loaded at once
+
+  // Handle leadId from URL query parameter (for opening lead from chatbot link)
+  useEffect(() => {
+    if (!user || !leads.length) return
+
+    const urlParams = new URLSearchParams(window.location.search)
+    const leadId = urlParams.get('leadId')
+
+    if (leadId) {
+      // Find the lead in the leads list
+      const lead = leads.find(l => l.id === leadId)
+      if (lead) {
+        setSelectedLead(lead)
+        setShowDetailModal(true)
+        // Remove leadId from URL to prevent reopening on refresh
+        const newUrl = window.location.pathname + window.location.search.replace(/[?&]leadId=[^&]*/, '').replace(/^\?/, '?').replace(/\?$/, '')
+        window.history.replaceState({}, '', newUrl || window.location.pathname)
+      }
+    }
+  }, [user, leads])
+
+  // Close filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showFilterDropdown && !event.target.closest('.filter-dropdown-container')) {
+        setShowFilterDropdown(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showFilterDropdown])
+
+  // Set up polling for new leads
+  useEffect(() => {
+    if (!user) return
+
+    const interval = setInterval(() => {
+      fetchLeads(false) // Don't show loading spinner for polling
+    }, 30000) // Poll every 30 seconds
+
+    setPollingInterval(interval)
+
+    return () => {
+      clearInterval(interval)
+    }
+  }, [user, fetchLeads])
+
+  const handleLeadClick = (lead) => {
+    setSelectedLead(lead)
+    setShowDetailModal(true)
+  }
+
+  const handleDeleteLead = async (lead) => {
+    if (!window.confirm(`Are you sure you want to delete "${lead.name || 'this lead'}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      await leadsAPI.deleteLead(lead.id)
+      showSuccess('Lead Deleted', 'Lead has been deleted successfully')
+      // Refresh leads list
+      await fetchLeads(false)
+      // Close modal if the deleted lead was selected
+      if (selectedLead && selectedLead.id === lead.id) {
+        setShowDetailModal(false)
+        setSelectedLead(null)
+      }
+      // Remove from selection if in selection mode
+      if (selectionMode) {
+        setSelectedLeadIds(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(lead.id)
+          return newSet
+        })
+      }
+    } catch (error) {
+      console.error('Error deleting lead:', error)
+      showError('Error', 'Failed to delete lead')
+    }
+  }
+
+  const handleToggleSelectionMode = () => {
+    setSelectionMode(!selectionMode)
+    if (selectionMode) {
+      setSelectedLeadIds(new Set())
+    }
+  }
+
+  const handleSelectLead = (leadId, isSelected) => {
+    setSelectedLeadIds(prev => {
+      const newSet = new Set(prev)
+      if (isSelected) {
+        newSet.add(leadId)
+      } else {
+        newSet.delete(leadId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = () => {
+    if (selectedLeadIds.size === filteredLeads.length) {
+      setSelectedLeadIds(new Set())
+    } else {
+      setSelectedLeadIds(new Set(filteredLeads.map(lead => lead.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    try {
+      setDeletingBulk(true)
+      const leadIdsArray = Array.from(selectedLeadIds)
+      const result = await leadsAPI.bulkDeleteLeads(leadIdsArray)
+
+      if (result.data.success) {
+        showSuccess(
+          'Leads Deleted',
+          `${result.data.deleted_count} lead${result.data.deleted_count > 1 ? 's' : ''} deleted successfully${result.data.failed_count > 0 ? ` (${result.data.failed_count} failed)` : ''}`
+        )
+        // Refresh leads list
+        await fetchLeads(false)
+        // Clear selection
+        setSelectedLeadIds(new Set())
+        // Exit selection mode if all selected leads are deleted
+        if (result.data.failed_count === 0) {
+          setSelectionMode(false)
+        }
+      } else {
+        showError('Error', 'Failed to delete some leads')
+      }
+    } catch (error) {
+      console.error('Error bulk deleting leads:', error)
+      showError('Error', 'Failed to delete leads')
+    } finally {
+      setDeletingBulk(false)
+      setShowBulkDeleteConfirm(false)
+    }
+  }
+
+  const handleCSVImport = async (file) => {
+    if (!file) {
+      showError('Error', 'Please select a CSV file')
+      return
+    }
+
+    if (!file.name.endsWith('.csv')) {
+      showError('Error', 'Please select a valid CSV file')
+      return
+    }
+
+    try {
+      setImportingCSV(true)
+      const response = await leadsAPI.importLeadsCSV(file)
+      const result = response.data || response
+
+      if (result.success) {
+        const hasErrors = result.errors > 0
+        const hasDuplicates = result.duplicates > 0
+
+        if (hasErrors && hasDuplicates) {
+          showInfo(
+            'Import Completed with Warnings',
+            `Successfully imported ${result.created} out of ${result.total_rows} leads. ${result.duplicates} duplicate(s) skipped, ${result.errors} error(s) occurred.`,
+            { duration: 6000 }
+          )
+          if (result.error_details && result.error_details.length > 0) {
+            console.warn('Import errors:', result.error_details)
+          }
+          if (result.duplicate_details && result.duplicate_details.length > 0) {
+            console.warn('Duplicate leads:', result.duplicate_details)
+          }
+        } else if (hasDuplicates) {
+          showInfo(
+            'Import Completed',
+            `Successfully imported ${result.created} out of ${result.total_rows} leads. ${result.duplicates} duplicate(s) skipped.`,
+            { duration: 5000 }
+          )
+          if (result.duplicate_details && result.duplicate_details.length > 0) {
+            console.warn('Duplicate leads:', result.duplicate_details)
+          }
+        } else if (hasErrors) {
+          showInfo(
+            'Import Completed with Errors',
+            `Successfully imported ${result.created} out of ${result.total_rows} leads. ${result.errors} error(s) occurred.`,
+            { duration: 5000 }
+          )
+          if (result.error_details && result.error_details.length > 0) {
+            console.warn('Import errors:', result.error_details)
+          }
+        } else {
+          showSuccess('Import Successful', `Successfully imported ${result.created} leads`)
+        }
+
+        // Refresh leads list
+        await fetchLeads(false)
+      } else {
+        showError('Import Failed', result.message || 'Failed to import leads')
+      }
+    } catch (error) {
+      console.error('Error importing CSV:', error)
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to import CSV file'
+      showError('Import Failed', errorMessage)
+    } finally {
+      setImportingCSV(false)
+    }
+  }
+
+  const handleCloseModal = () => {
+    setShowDetailModal(false)
+    setSelectedLead(null)
+    // Refresh leads after modal closes in case status was updated
+    fetchLeads(false)
+  }
+
+  const handleRefresh = () => {
+    fetchLeads()
+    showSuccess('Refreshed', 'Leads list updated')
+  }
+
+  const filteredLeads = useMemo(() => {
+    return leads.filter(lead => {
+      // Status filter
+      if (filterStatus !== 'all' && lead.status !== filterStatus) {
+        return false
+      }
+
+      // Date range filter (skip when showing overdue follow-ups only)
+      if (!showOverdueFollowUpsOnly && filterDateRange !== 'all') {
+        let dateRange = null
+
+        if (filterDateRange === 'custom' && customStartDate && customEndDate) {
+          // Use custom date range
+          dateRange = {
+            start: new Date(customStartDate + 'T00:00:00'),
+            end: new Date(customEndDate + 'T23:59:59')
+          }
+        } else {
+          // Use predefined date range
+          dateRange = getDateRange(filterDateRange)
+        }
+
+        if (dateRange) {
+          const leadDate = new Date(lead.created_at)
+          if (leadDate < dateRange.start || leadDate > dateRange.end) {
+            return false
+          }
+        }
+      }
+
+      // Search query filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase()
+        const matchesName = lead.name?.toLowerCase().includes(query)
+        const matchesEmail = lead.email?.toLowerCase().includes(query)
+        const matchesPhone = lead.phone_number?.toLowerCase().includes(query)
+        if (!matchesName && !matchesEmail && !matchesPhone) {
+          return false
+        }
+      }
+
+      // Overdue follow-ups filter
+      if (showOverdueFollowUpsOnly) {
+        if (!lead.follow_up_at) return false
+
+        const date = new Date(lead.follow_up_at)
+        const now = new Date()
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const followUpDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+        const diffInDays = Math.floor((followUpDate - today) / (1000 * 60 * 60 * 24))
+
+        if (diffInDays >= 0) return false // Not overdue
+      }
+
+      return true
+    })
+  }, [leads, filterStatus, filterDateRange, customStartDate, customEndDate, searchQuery, showOverdueFollowUpsOnly])
+
+  const dateRangeFilters = [
+    { value: 'today', label: 'Today' },
+    { value: 'this_week', label: 'This Week' },
+    { value: 'this_month', label: 'This Month' },
+    { value: 'last_month', label: 'Last Month' },
+    { value: 'all', label: 'All Time' },
+    { value: 'custom', label: 'Custom Range' }
+  ]
+
+  const statusFilters = [
+    { value: 'new', label: 'New' },
+    { value: 'contacted', label: 'Contacted' },
+    { value: 'responded', label: 'Responded' },
+    { value: 'qualified', label: 'Qualified' },
+    { value: 'converted', label: 'Converted' },
+    { value: 'lost', label: 'Lost' },
+    { value: 'invalid', label: 'Invalid' }
+  ]
+
+  const getStatusConfig = (status) => {
+    const configs = {
+      new: {
+        color: 'from-blue-500 to-blue-600',
+        bgColor: 'bg-blue-50',
+        textColor: isDarkMode ? 'text-blue-400' : 'text-blue-700',
+        borderColor: isDarkMode ? 'border-blue-700' : 'border-blue-300',
+        icon: AlertCircle,
+        label: 'New'
+      },
+      contacted: {
+        color: 'from-purple-500 to-purple-600',
+        bgColor: 'bg-purple-50',
+        textColor: isDarkMode ? 'text-purple-400' : 'text-purple-700',
+        borderColor: isDarkMode ? 'border-purple-700' : 'border-purple-300',
+        icon: MessageCircle,
+        label: 'Contacted'
+      },
+      responded: {
+        color: 'from-green-500 to-green-600',
+        bgColor: 'bg-green-50',
+        textColor: isDarkMode ? 'text-green-400' : 'text-green-700',
+        borderColor: isDarkMode ? 'border-green-700' : 'border-green-300',
+        icon: CheckCircle,
+        label: 'Responded'
+      },
+      qualified: {
+        color: 'from-orange-500 to-orange-600',
+        bgColor: 'bg-orange-50',
+        textColor: isDarkMode ? 'text-orange-400' : 'text-orange-700',
+        borderColor: isDarkMode ? 'border-orange-700' : 'border-orange-300',
+        icon: CheckCircle,
+        label: 'Qualified'
+      },
+      converted: {
+        color: 'from-emerald-500 to-emerald-600',
+        bgColor: 'bg-emerald-50',
+        textColor: isDarkMode ? 'text-emerald-400' : 'text-emerald-700',
+        borderColor: isDarkMode ? 'border-emerald-700' : 'border-emerald-300',
+        icon: CheckCircle,
+        label: 'Converted'
+      },
+      lost: {
+        color: 'from-gray-400 to-gray-500',
+        bgColor: 'bg-gray-50',
+        textColor: isDarkMode ? 'text-gray-400' : 'text-gray-700',
+        borderColor: isDarkMode ? 'border-gray-600' : 'border-gray-300',
+        icon: XCircle,
+        label: 'Lost'
+      },
+      invalid: {
+        color: 'from-red-500 to-red-600',
+        bgColor: 'bg-red-50',
+        textColor: isDarkMode ? 'text-red-400' : 'text-red-700',
+        borderColor: isDarkMode ? 'border-red-700' : 'border-red-300',
+        icon: XCircle,
+        label: 'Invalid'
+      }
+    }
+    return configs[status] || configs.new
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Not Authenticated</h1>
+          <p className="text-gray-600">Please log in to access leads.</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+      <SideNavbar />
+      <MobileNavigation
+        setShowCustomContentChatbot={() => { }}
+        handleGenerateContent={() => { }}
+        generating={false}
+        fetchingFreshData={false}
+      />
+
+      <div className={`md:ml-48 xl:ml-64 flex flex-col min-h-screen ${
+        isDarkMode ? 'md:bg-gray-800' : 'md:bg-gray-50'
+      }`}>
+        {/* Header */}
+        <div className={`shadow-sm border-b sticky top-0 z-20 ${
+          isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-white'
+        }`}>
+          <div className="px-4 lg:px-6 py-3 lg:py-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
+              {/* Date Range Filter */}
+              <div className="flex items-center gap-2 overflow-x-auto flex-1">
+                {dateRangeFilters.map((filter) => (
+                  <button
+                    key={filter.value}
+                    onClick={() => {
+                      setFilterDateRange(filter.value)
+                      if (filter.value === 'custom') {
+                        setShowCustomDatePicker(true)
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${filterDateRange === filter.value
+                      ? isDarkMode
+                        ? 'bg-white text-gray-900 shadow-md'
+                        : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md'
+                      : isDarkMode
+                      ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                      }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Date Picker */}
+              {filterDateRange === 'custom' && (
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-1">
+                    <CalendarDays className={`w-4 h-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className={`px-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+                        isDarkMode
+                          ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500'
+                          : 'bg-white border-gray-300 text-gray-900 focus:ring-green-500 focus:border-green-500'
+                      }`}
+                      placeholder="Start date"
+                    />
+                  </div>
+                  <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>to</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className={`px-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+                        isDarkMode
+                          ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500'
+                          : 'bg-white border-gray-300 text-gray-900 focus:ring-green-500 focus:border-green-500'
+                      }`}
+                      placeholder="End date"
+                    />
+                    {(customStartDate || customEndDate) && (
+                      <button
+                        onClick={() => {
+                          setCustomStartDate('')
+                          setCustomEndDate('')
+                        }}
+                        className={`p-1 rounded transition-colors ${
+                          isDarkMode
+                            ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-600'
+                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                        }`}
+                        title="Clear date filter"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Search - Inline with Filter */}
+              <div className="flex-1 max-w-xs relative filter-dropdown-container">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search by name, email, or phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={`w-full pl-10 pr-10 py-2 text-sm border rounded-lg focus:ring-2 ${
+                    isDarkMode
+                      ? 'bg-gray-700 border-gray-600 text-gray-200 focus:ring-green-500 focus:border-green-500 placeholder-gray-400'
+                      : 'border-gray-300 focus:ring-blue-500 focus:border-transparent'
+                  }`}
+                />
+                <button
+                  onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                  className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-1 rounded transition-colors ${
+                    filterPlatform !== 'all'
+                      ? 'text-green-600'
+                      : isDarkMode
+                      ? 'text-gray-500 hover:text-gray-300'
+                      : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                >
+                  <Filter className="w-4 h-4" />
+                </button>
+                {showFilterDropdown && (
+                  <div className={`absolute right-0 mt-2 w-48 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto ${
+                    isDarkMode
+                      ? 'bg-gray-800 border border-gray-700 shadow-gray-900/50'
+                      : 'bg-white border border-gray-200'
+                  }`}>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('all')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm first:rounded-t-lg ${filterPlatform === 'all'
+                        ? isDarkMode
+                          ? 'bg-white text-gray-900 font-medium'
+                          : 'bg-green-100 text-green-700 font-medium'
+                        : isDarkMode
+                        ? 'text-gray-200 hover:bg-gray-700'
+                        : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                      All Platforms
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('facebook')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'facebook'
+                          ? isDarkMode
+                            ? 'bg-white text-gray-900 font-medium'
+                            : 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                      Facebook
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('instagram')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'instagram'
+                          ? isDarkMode
+                            ? 'bg-white text-gray-900 font-medium'
+                            : 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                      Instagram
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('walk_ins')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'walk_ins'
+                          ? isDarkMode
+                            ? 'bg-white text-gray-900 font-medium'
+                            : 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                      Walk Ins
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('referral')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'referral'
+                          ? isDarkMode
+                            ? 'bg-white text-gray-900 font-medium'
+                            : 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                      Referral
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('email')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'email'
+                          ? isDarkMode
+                            ? 'bg-white text-gray-900 font-medium'
+                            : 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                      Email
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('website')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm ${
+                        filterPlatform === 'website'
+                          ? isDarkMode
+                            ? 'bg-white text-gray-900 font-medium'
+                            : 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                      Website
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterPlatform('phone_call')
+                        setShowFilterDropdown(false)
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm last:rounded-b-lg ${
+                        filterPlatform === 'phone_call'
+                          ? isDarkMode
+                            ? 'bg-white text-gray-900 font-medium'
+                            : 'bg-green-100 text-green-700 font-medium'
+                          : isDarkMode
+                          ? 'text-gray-200 hover:bg-gray-700'
+                          : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                      Phone Call
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Overdue Filter Indicator */}
+              {showOverdueFollowUpsOnly && (
+                <div className="flex items-center space-x-2 flex-shrink-0">
+                  <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-sm ${
+                    isDarkMode ? 'bg-yellow-900/30 text-yellow-300' : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    <CalendarDays className="w-4 h-4" />
+                    <span>Showing overdue follow-ups only</span>
+                    <button
+                      onClick={() => setShowOverdueFollowUpsOnly(false)}
+                      className={`ml-2 p-0.5 rounded hover:bg-black/10 ${
+                        isDarkMode ? 'hover:bg-white/10' : ''
+                      }`}
+                      title="Clear filter"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-2 flex-shrink-0">
+                {selectionMode && (
+                  <>
+                    {/* Selection Count */}
+                    <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
+                      isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-sm font-medium">
+                        {selectedLeadIds.size} selected
+                      </span>
+                    </div>
+
+                    {/* Select All/Deselect All */}
+                    <button
+                      onClick={handleSelectAll}
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 ${
+                        isDarkMode
+                          ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border border-gray-600'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                      }`}
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-sm font-medium">
+                        {selectedLeadIds.size === filteredLeads.length ? 'Deselect All' : 'Select All'}
+                      </span>
+                    </button>
+
+                    {/* Bulk Delete - Only show when items are selected */}
+                    {selectedLeadIds.size > 0 && (
+                      <button
+                        onClick={() => setShowBulkDeleteConfirm(true)}
+                        className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-medium ${
+                          deletingBulk
+                            ? 'opacity-50 cursor-not-allowed bg-gray-400 text-white'
+                            : 'bg-red-500 hover:bg-red-600 text-white shadow-lg hover:shadow-xl'
+                        }`}
+                      >
+                        {deletingBulk ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <XCircle className="w-4 h-4" />
+                        )}
+                        <span>Delete ({selectedLeadIds.size})</span>
+                      </button>
+                    )}
+
+                    {/* Cancel Selection */}
+                    <button
+                      onClick={handleToggleSelectionMode}
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 ${
+                        isDarkMode
+                          ? 'bg-gray-600 text-gray-200 hover:bg-gray-500 border border-gray-600'
+                          : 'bg-gray-500 text-white hover:bg-gray-600 border border-gray-400'
+                      }`}
+                    >
+                      <X className="w-4 h-4" />
+                      <span className="text-sm font-medium">Cancel</span>
+                    </button>
+                  </>
+                )}
+                {!selectionMode && (
+                  <>
+                    {/* Bulk Selection Toggle */}
+                    <button
+                      onClick={handleToggleSelectionMode}
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg border ${
+                        isDarkMode
+                          ? 'bg-blue-600 text-white hover:bg-blue-700 border-blue-500'
+                          : 'bg-blue-500 text-white hover:bg-blue-600 border-blue-400'
+                      }`}
+                      title="Select multiple leads for bulk actions"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-sm font-medium">Select</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowAddModal(true)}
+                      className={`p-2 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg border ${
+                        isDarkMode
+                          ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border-gray-600'
+                          : 'bg-white text-black hover:bg-gray-100 border-gray-200'
+                      }`}
+                      title="Add Lead"
+                    >
+                      <UserPlus className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={handleRefresh}
+                      disabled={loading}
+                      className={`p-2 rounded-lg transition-all duration-200 disabled:opacity-50 shadow-md hover:shadow-lg border ${
+                        isDarkMode
+                          ? 'bg-gray-700 text-gray-200 hover:bg-gray-600 border-gray-600'
+                          : 'bg-white text-black hover:bg-gray-100 border-gray-200'
+                      }`}
+                      title="Refresh"
+                    >
+                      <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Leads Board - Column Layout by Status */}
+        <div className="flex-1 px-4 lg:px-6 py-6 overflow-x-hidden">
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <p className={`text-lg ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Loading leads...</p>
+            </div>
+          ) : filteredLeads.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className={`w-16 h-16 mx-auto mb-4 ${
+                isDarkMode ? 'text-gray-600' : 'text-gray-300'
+              }`} />
+              <h3 className={`text-lg font-semibold mb-2 ${
+                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+              }`}>
+                {searchQuery ? 'No leads found' : 'No leads yet'}
+              </h3>
+              <p className={`${
+                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                {searchQuery
+                  ? 'Try adjusting your search or filters'
+                  : 'Leads from your Facebook and Instagram ads will appear here'}
+              </p>
+            </div>
+          ) : (
+            <div className="flex gap-2 w-full">
+              {statusFilters
+                .filter(statusFilter => statusFilter.value !== 'all') // Exclude 'all' from column view
+                .map((statusFilter) => {
+                  const columnLeads = filteredLeads.filter(lead => lead.status === statusFilter.value)
+                  const statusConfig = getStatusConfig(statusFilter.value)
+                  const StatusIcon = statusConfig.icon
+
+                  return (
+                    <div key={statusFilter.value} className="flex-1 min-w-0">
+                      {/* Column Header */}
+                      <div className="mb-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-1.5">
+                            <StatusIcon className={`w-3 h-3 ${statusConfig.textColor}`} />
+                            <h3 className={`font-normal text-sm ${statusConfig.textColor}`}>{statusFilter.label}</h3>
+                          </div>
+                          <span className={`text-sm font-medium ${statusConfig.textColor}`}>
+                            {columnLeads.length}
+                          </span>
+                        </div>
+                      </div>
+                      {/* Line after column title */}
+                      <div className={`mb-2 border-b ${statusConfig.borderColor}`}></div>
+
+                      {/* Column Cards */}
+                      <div className={`space-y-1.5 max-h-[calc(100vh-180px)] overflow-y-auto pb-4 custom-scrollbar ${
+                        isDarkMode ? 'dark-mode' : 'light-mode'
+                      }`}>
+                        {columnLeads.length === 0 ? (
+                          <div className={`text-center py-8 text-sm ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                          }`}>
+                            No {statusFilter.label.toLowerCase()} leads
+                          </div>
+                        ) : (
+                          columnLeads.map((lead) => (
+                            <LeadCard
+                              key={lead.id}
+                              lead={lead}
+                              onClick={handleLeadClick}
+                              onDelete={handleDeleteLead}
+                              isSelected={selectedLeadIds.has(lead.id)}
+                              onSelect={handleSelectLead}
+                              isDarkMode={isDarkMode}
+                              selectionMode={selectionMode}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* No infinite scroll loading - all leads loaded at once */}
+
+      {/* No infinite scroll - all leads loaded at once */}
+
+      {/* End of list indicator */}
+      {loadedCount > 0 && (
+        <div className={`text-center py-6 text-sm ${
+          isDarkMode ? 'text-gray-400' : 'text-gray-600'
+        }`}>
+          All leads loaded - {loadedCount} of {total} leads
+        </div>
+      )}
+
+
+      {/* Lead Detail Modal */}
+      {showDetailModal && selectedLead && (
+        <LeadDetailModal
+          lead={selectedLead}
+          onClose={handleCloseModal}
+          onUpdate={fetchLeads}
+          isDarkMode={isDarkMode}
+        />
+      )}
+
+      {/* Add Lead Modal */}
+      <AddLeadModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={async (data) => {
+          if (data && data.type === 'csv') {
+            // Handle CSV import
+            await handleCSVImport(data.file)
+            setShowAddModal(false)
+          } else {
+            // Handle regular lead creation
+            await fetchLeads(false)
+            setShowAddModal(false)
+          }
+        }}
+        isImporting={importingCSV}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 py-4 text-center">
+            {/* Background overlay */}
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              onClick={() => setShowBulkDeleteConfirm(false)}
+            ></div>
+
+            {/* Modal panel */}
+            <div className={`inline-block w-full max-w-lg rounded-lg text-left overflow-hidden shadow-xl transform transition-all ${
+              isDarkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white'
+            }`}>
+              <div className="px-6 py-4">
+                {/* Header */}
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="flex-shrink-0">
+                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                      <AlertCircle className="w-6 h-6 text-red-600" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className={`text-lg font-semibold ${
+                      isDarkMode ? 'text-white' : 'text-gray-900'
+                    }`}>
+                      Delete Selected Leads
+                    </h3>
+                    <p className={`text-sm ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>
+                      This action cannot be undone
+                    </p>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className={`mb-6 p-4 rounded-lg ${
+                  isDarkMode ? 'bg-red-900/20 border border-red-800' : 'bg-red-50 border border-red-200'
+                }`}>
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0">
+                      <XCircle className="w-5 h-5 text-red-500 mt-0.5" />
+                    </div>
+                    <div>
+                      <p className={`text-sm font-medium ${
+                        isDarkMode ? 'text-red-300' : 'text-red-800'
+                      }`}>
+                        You are about to delete {selectedLeadIds.size} lead{selectedLeadIds.size > 1 ? 's' : ''}
+                      </p>
+                      <div className={`mt-2 text-sm ${
+                        isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>
+                        <p>This will permanently remove:</p>
+                        <ul className="mt-1 ml-4 list-disc list-inside space-y-1">
+                          <li>{selectedLeadIds.size} lead record{selectedLeadIds.size > 1 ? 's' : ''}</li>
+                          <li>All associated status history</li>
+                          <li>All follow-up reminders and schedules</li>
+                          <li>Contact information and notes</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Warning */}
+                <div className={`flex items-start space-x-2 p-3 rounded-lg ${
+                  isDarkMode ? 'bg-yellow-900/20 border border-yellow-800' : 'bg-yellow-50 border border-yellow-200'
+                }`}>
+                  <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                  <p className={`text-sm ${
+                    isDarkMode ? 'text-yellow-300' : 'text-yellow-800'
+                  }`}>
+                    <strong>Warning:</strong> This action cannot be undone. Make sure you have selected the correct leads.
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className={`px-6 py-4 flex justify-end space-x-3 ${
+                isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
+              }`}>
+                <button
+                  onClick={() => setShowBulkDeleteConfirm(false)}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    isDarkMode
+                      ? 'text-gray-300 hover:text-white hover:bg-gray-600'
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                  disabled={deletingBulk}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={deletingBulk}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center space-x-2 ${
+                    deletingBulk
+                      ? 'opacity-50 cursor-not-allowed bg-gray-400 text-white'
+                      : 'bg-red-500 hover:bg-red-600 text-white shadow-lg hover:shadow-xl'
+                  }`}
+                >
+                  {deletingBulk && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{deletingBulk ? 'Deleting...' : 'Delete Leads'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default LeadsDashboard
+
